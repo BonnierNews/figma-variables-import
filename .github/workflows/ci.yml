@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  pull_request:
+    types: [ opened, synchronize, ready_for_review, reopened ]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run tsc
+
+      - run: npm run lint
+
+      - run: npm run build
+
+      - name: Check dist is up to date
+        run: |
+          if ! git diff --exit-code dist/index.js; then
+            echo "dist/index.js is stale. Run 'npm run build' and commit the result."
+            exit 1
+          fi
