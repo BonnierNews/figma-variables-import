@@ -42,7 +42,12 @@ jobs:
           VERSION=$(node -p "require('./package.json').version")
           MAJOR=$(echo "$VERSION" | cut -d. -f1)
 
-          git tag "v${VERSION}" --force
+          if git ls-remote --tags origin "refs/tags/v${VERSION}" | grep -q "v${VERSION}"; then
+            echo "v${VERSION} already released, skipping."
+            exit 0
+          fi
+
+          git tag "v${VERSION}"
           git tag "v${MAJOR}" --force
-          git push origin "v${VERSION}" --force
+          git push origin "v${VERSION}"
           git push origin "v${MAJOR}" --force
