@@ -1,6 +1,7 @@
 import config from "@bonniernews/eslint-config";
 
 export default [
+  { ignores: [ "dist/" ] },
   ...config,
   {
     files: [ "src/**/*.ts" ],
