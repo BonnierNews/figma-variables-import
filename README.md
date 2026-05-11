@@ -1,8 +1,60 @@
 # figma-tokens-action
 
-A reusable GitHub Action that fetches variables from a Figma file, writes raw [W3C design token](https://design-tokens.github.io/community-group/format/) JSON files, runs [Style Dictionary v5](https://styledictionary.com/), and commits the output back to the calling repo.
+Fetches variables from a Figma file, writes raw [W3C design token](https://design-tokens.github.io/community-group/format/) JSON files, runs [Style Dictionary v5](https://styledictionary.com/), and commits the output back to the calling repo.
 
-## Prerequisites
+Available as both a **GitHub Action** and an **npm package** (`@bonniernews/figma-tokens-action`).
+
+## npm package
+
+Install from the GitHub npm registry:
+
+```bash
+npm install @bonniernews/figma-tokens-action
+```
+
+Add the registry to your `.npmrc`:
+
+```
+@bonniernews:registry=https://npm.pkg.github.com
+```
+
+### Usage
+
+```ts
+import { syncFigmaTokens } from "@bonniernews/figma-tokens-action";
+
+await syncFigmaTokens({
+  figmaToken: process.env.FIGMA_TOKEN,
+  figmaFileId: "your-file-id",
+  tokensOutputPath: "/path/to/repo/design-tokens/tokens",
+  jsonOutputPath: "/path/to/repo/design-tokens/json",
+  excludedCollections: ["Deprecated", "Internal"],
+});
+```
+
+`tokensOutputPath` and `jsonOutputPath` must be absolute paths. After running, the function commits and pushes the written files using the same git logic as the GitHub Action.
+
+### Options
+
+| Option | Required | Default | Description |
+|---|---|---|---|
+| `figmaToken` | yes | — | Figma personal access token |
+| `figmaFileId` | yes | — | The Figma file ID to fetch variables from |
+| `tokensOutputPath` | yes | — | Absolute path where raw W3C token JSON files are written |
+| `jsonOutputPath` | yes | — | Absolute path where Style Dictionary output is written |
+| `excludedCollections` | no | `[]` | Collection names to skip (array or Set) |
+| `sdConfigPath` | no | — | Absolute path to a Style Dictionary v5 config file. Takes full precedence over `sdTransforms`/`sdOutputFormat` |
+| `sdTransforms` | no | `["attribute/cti", "name/kebab", "size/rem"]` | SD transforms to apply |
+| `sdOutputFormat` | no | `"json/nested"` | SD output format |
+| `commitMessage` | no | `"chore: update design tokens from Figma"` | Commit message |
+| `gitUserName` | no | `"github-actions[bot]"` | Git user name for the commit |
+| `gitUserEmail` | no | `"github-actions[bot]@users.noreply.github.com"` | Git user email for the commit |
+
+---
+
+## GitHub Action
+
+### Prerequisites
 
 The calling workflow must:
 
@@ -11,7 +63,7 @@ The calling workflow must:
 3. Store a Figma personal access token as a repository secret (e.g. `FIGMA_TOKEN`)
 4. Use a `concurrency:` group to prevent parallel runs on the same branch
 
-## Inputs
+### Inputs
 
 | Input | Required | Default | Description |
 |---|---|---|---|
@@ -27,9 +79,9 @@ The calling workflow must:
 | `git-user-name` | no | `github-actions[bot]` | Git user name for the commit |
 | `git-user-email` | no | `github-actions[bot]@users.noreply.github.com` | Git user email for the commit |
 
-## Usage
+### Usage
 
-### Minimal (default Style Dictionary config)
+#### Minimal (default Style Dictionary config)
 
 ```yaml
 name: Sync Figma Tokens
@@ -60,7 +112,7 @@ jobs:
           excluded-collections: "Deprecated,Internal"
 ```
 
-### With a custom Style Dictionary config
+#### With a custom Style Dictionary config
 
 ```yaml
       - uses: bonniernews/figma-tokens-action@v1
@@ -80,6 +132,8 @@ If the SD config uses custom transforms or formats installed as npm packages, ad
         with:
           ...
 ```
+
+---
 
 ## Implementation notes
 
