@@ -1,0 +1,13 @@
+{
+  "extends": "@bonniernews/tsconfig",
+  "compilerOptions": {
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "outDir": "dist/lib",
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "noEmit": false,
+    "allowImportingTsExtensions": true
+  },
+  "include": [ "src/index.ts" ]
+}

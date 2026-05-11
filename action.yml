@@ -1,0 +1,52 @@
+name: Figma Tokens
+description: Fetch Figma variables, generate W3C token files, run Style Dictionary, commit results
+author: Bonnier News
+
+inputs:
+  figma-token:
+    description: Figma personal access token
+    required: true
+  figma-file-id:
+    description: The Figma file ID to fetch variables from
+    required: true
+  tokens-output-path:
+    description: >
+      Path in the calling repo where raw W3C token JSON files are written.
+      This mirrors the Figma collection hierarchy as directories.
+    required: false
+    default: design-tokens/tokens
+  json-output-path:
+    description: Path in the calling repo where Style Dictionary output is written
+    required: false
+    default: design-tokens/json
+  excluded-collections:
+    description: >
+      Comma-separated list of Figma collection names to skip entirely.
+      Example: "Deprecated,Internal,OldBrand"
+    required: false
+    default: ""
+  style-dictionary-config:
+    description: >
+      Path to a Style Dictionary v5 config file in the calling repo (relative to repo root).
+      When provided, this takes full precedence — sd-transforms and sd-output-format are ignored.
+      The caller is responsible for setting source/output paths inside the config.
+    required: false
+    default: ""
+  sd-transforms:
+    description: >
+      Comma-separated Style Dictionary transform names to apply.
+      Used only when style-dictionary-config is not provided.
+      Example: "attribute/cti,name/kebab,size/rem"
+    required: false
+    default: "attribute/cti,name/kebab,size/rem"
+  sd-output-format:
+    description: >
+      Style Dictionary output format identifier.
+      Used only when style-dictionary-config is not provided.
+      Example: "css/variables" or "json/nested"
+    required: false
+    default: "json/nested"
+
+runs:
+  using: node20
+  main: dist/index.js
