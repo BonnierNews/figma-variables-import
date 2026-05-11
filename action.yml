@@ -46,18 +46,6 @@ inputs:
       Example: "css/variables" or "json/nested"
     required: false
     default: "json/nested"
-  commit-message:
-    description: Commit message used when committing token files back to the repo
-    required: false
-    default: "chore: update design tokens from Figma"
-  git-user-name:
-    description: Git user name for the commit
-    required: false
-    default: "github-actions[bot]"
-  git-user-email:
-    description: Git user email for the commit
-    required: false
-    default: "github-actions[bot]@users.noreply.github.com"
 
 runs:
   using: node20

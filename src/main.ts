@@ -2,7 +2,6 @@ import * as core from "@actions/core";
 
 import { getLocalVariables } from "./figma-api.ts";
 import { parseInputs } from "./inputs.ts";
-import { commitAndPush } from "./git.ts";
 import { runStyleDictionary } from "./style-dictionary.ts";
 import { tokenFilesFromLocalVariables } from "./token-generation.ts";
 import { writeTokenFiles } from "./write-tokens.ts";
@@ -29,14 +28,6 @@ async function main(): Promise<void> {
     sdTransforms: inputs.sdTransforms,
     sdOutputFormat: inputs.sdOutputFormat,
   });
-
-  core.info("Committing changes");
-  await commitAndPush(
-    [ inputs.tokensOutputPath, inputs.jsonOutputPath ],
-    inputs.commitMessage,
-    inputs.gitUserName,
-    inputs.gitUserEmail
-  );
 }
 
 main().catch((err) => {

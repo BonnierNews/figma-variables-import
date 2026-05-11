@@ -1,6 +1,6 @@
 # figma-tokens-action
 
-Fetches variables from a Figma file, writes raw [W3C design token](https://design-tokens.github.io/community-group/format/) JSON files, runs [Style Dictionary v5](https://styledictionary.com/), and commits the output back to the calling repo.
+Fetches variables from a Figma file, writes raw [W3C design token](https://design-tokens.github.io/community-group/format/) JSON files, and runs [Style Dictionary v5](https://styledictionary.com/). The generated files are written to disk — committing them is left to the caller.
 
 Available as both a **GitHub Action** and an **npm package** (`@bonniernews/figma-tokens-action`).
 
@@ -28,11 +28,11 @@ await syncFigmaTokens({
   figmaFileId: "your-file-id",
   tokensOutputPath: "/path/to/repo/design-tokens/tokens",
   jsonOutputPath: "/path/to/repo/design-tokens/json",
-  excludedCollections: ["Deprecated", "Internal"],
+  excludedCollections: [ "Deprecated", "Internal" ],
 });
 ```
 
-`tokensOutputPath` and `jsonOutputPath` must be absolute paths. After running, the function commits and pushes the written files using the same git logic as the GitHub Action.
+`tokensOutputPath` and `jsonOutputPath` must be absolute paths. The function writes the files and returns — committing is left to the caller.
 
 ### Options
 
@@ -46,9 +46,6 @@ await syncFigmaTokens({
 | `sdConfigPath` | no | — | Absolute path to a Style Dictionary v5 config file. Takes full precedence over `sdTransforms`/`sdOutputFormat` |
 | `sdTransforms` | no | `["attribute/cti", "name/kebab", "size/rem"]` | SD transforms to apply |
 | `sdOutputFormat` | no | `"json/nested"` | SD output format |
-| `commitMessage` | no | `"chore: update design tokens from Figma"` | Commit message |
-| `gitUserName` | no | `"github-actions[bot]"` | Git user name for the commit |
-| `gitUserEmail` | no | `"github-actions[bot]@users.noreply.github.com"` | Git user email for the commit |
 
 ---
 
@@ -58,10 +55,8 @@ await syncFigmaTokens({
 
 The calling workflow must:
 
-1. Run `actions/checkout@v4` **before** this action (the default `persist-credentials: true` is required for the git push)
-2. Grant `permissions: contents: write`
-3. Store a Figma personal access token as a repository secret (e.g. `FIGMA_TOKEN`)
-4. Use a `concurrency:` group to prevent parallel runs on the same branch
+1. Run `actions/checkout@v4` **before** this action so the workspace is populated
+2. Store a Figma personal access token as a repository secret (e.g. `FIGMA_TOKEN`)
 
 ### Inputs
 
@@ -75,9 +70,6 @@ The calling workflow must:
 | `style-dictionary-config` | no | `""` | Path to a Style Dictionary v5 config file (relative to repo root). Takes full precedence — `sd-transforms` and `sd-output-format` are ignored when set |
 | `sd-transforms` | no | `attribute/cti,name/kebab,size/rem` | Comma-separated SD transform names. Used only when `style-dictionary-config` is not provided |
 | `sd-output-format` | no | `json/nested` | Style Dictionary output format. Used only when `style-dictionary-config` is not provided |
-| `commit-message` | no | `chore: update design tokens from Figma` | Commit message for the token update commit |
-| `git-user-name` | no | `github-actions[bot]` | Git user name for the commit |
-| `git-user-email` | no | `github-actions[bot]@users.noreply.github.com` | Git user email for the commit |
 
 ### Usage
 
@@ -145,6 +137,3 @@ Figma's `LocalVariableCollection` includes an undocumented `parentVariableCollec
 
 When using the default (inline) SD config, all token files are passed as `include` sources so Style Dictionary can resolve cross-collection references. Figma formula strings that are not valid SD references produce warnings rather than errors.
 
-### Preventing empty commits
-
-The action checks `git diff --staged` before committing. If no token files changed, the commit is skipped and the action exits successfully.

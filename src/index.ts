@@ -1,5 +1,4 @@
 import { getLocalVariables } from "./figma-api.ts";
-import { commitAndPush } from "./git.ts";
 import { runStyleDictionary } from "./style-dictionary.ts";
 import { tokenFilesFromLocalVariables } from "./token-generation.ts";
 import { writeTokenFiles } from "./write-tokens.ts";
@@ -19,12 +18,6 @@ export interface SyncOptions {
   sdTransforms?: string[];
   /** Style Dictionary output format (default: json/nested) */
   sdOutputFormat?: string;
-  /** Commit message (default: "chore: update design tokens from Figma") */
-  commitMessage?: string;
-  /** Git user name for the commit (default: github-actions[bot]) */
-  gitUserName?: string;
-  /** Git user email for the commit (default: github-actions[bot]@users.noreply.github.com) */
-  gitUserEmail?: string;
 }
 
 export async function syncFigmaTokens(options: SyncOptions): Promise<void> {
@@ -37,9 +30,6 @@ export async function syncFigmaTokens(options: SyncOptions): Promise<void> {
     sdConfigPath = null,
     sdTransforms = [ "attribute/cti", "name/kebab", "size/rem" ],
     sdOutputFormat = "json/nested",
-    commitMessage = "chore: update design tokens from Figma",
-    gitUserName = "github-actions[bot]",
-    gitUserEmail = "github-actions[bot]@users.noreply.github.com",
   } = options;
 
   const excludedSet = Array.isArray(excludedCollections)
@@ -50,5 +40,4 @@ export async function syncFigmaTokens(options: SyncOptions): Promise<void> {
   const tokenFiles = tokenFilesFromLocalVariables(rawData, excludedSet);
   writeTokenFiles(tokenFiles, tokensOutputPath);
   await runStyleDictionary({ tokensOutputPath, jsonOutputPath, sdConfigPath, sdTransforms, sdOutputFormat });
-  await commitAndPush([ tokensOutputPath, jsonOutputPath ], commitMessage, gitUserName, gitUserEmail);
 }

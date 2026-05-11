@@ -19424,7 +19424,7 @@ var require_exec = __commonJS({
     exports.getExecOutput = exports.exec = void 0;
     var string_decoder_1 = __require("string_decoder");
     var tr5 = __importStar2(require_toolrunner());
-    function exec3(commandLine, args, options) {
+    function exec(commandLine, args, options) {
       return __awaiter2(this, void 0, void 0, function* () {
         const commandArgs = tr5.argStringToArray(commandLine);
         if (commandArgs.length === 0) {
@@ -19436,7 +19436,7 @@ var require_exec = __commonJS({
         return runner.exec();
       });
     }
-    exports.exec = exec3;
+    exports.exec = exec;
     function getExecOutput(commandLine, args, options) {
       var _a5, _b2;
       return __awaiter2(this, void 0, void 0, function* () {
@@ -19459,7 +19459,7 @@ var require_exec = __commonJS({
           }
         };
         const listeners = Object.assign(Object.assign({}, options === null || options === void 0 ? void 0 : options.listeners), { stdout: stdOutListener, stderr: stdErrListener });
-        const exitCode = yield exec3(commandLine, args, Object.assign(Object.assign({}, options), { listeners }));
+        const exitCode = yield exec(commandLine, args, Object.assign(Object.assign({}, options), { listeners }));
         stdout += stdoutDecoder.end();
         stderr += stderrDecoder.end();
         return {
@@ -19537,12 +19537,12 @@ var require_platform = __commonJS({
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.getDetails = exports.isLinux = exports.isMacOS = exports.isWindows = exports.arch = exports.platform = void 0;
     var os_1 = __importDefault2(__require("os"));
-    var exec3 = __importStar2(require_exec());
+    var exec = __importStar2(require_exec());
     var getWindowsInfo = () => __awaiter2(void 0, void 0, void 0, function* () {
-      const { stdout: version } = yield exec3.getExecOutput('powershell -command "(Get-CimInstance -ClassName Win32_OperatingSystem).Version"', void 0, {
+      const { stdout: version } = yield exec.getExecOutput('powershell -command "(Get-CimInstance -ClassName Win32_OperatingSystem).Version"', void 0, {
         silent: true
       });
-      const { stdout: name2 } = yield exec3.getExecOutput('powershell -command "(Get-CimInstance -ClassName Win32_OperatingSystem).Caption"', void 0, {
+      const { stdout: name2 } = yield exec.getExecOutput('powershell -command "(Get-CimInstance -ClassName Win32_OperatingSystem).Caption"', void 0, {
         silent: true
       });
       return {
@@ -19552,7 +19552,7 @@ var require_platform = __commonJS({
     });
     var getMacOsInfo = () => __awaiter2(void 0, void 0, void 0, function* () {
       var _a5, _b2, _c2, _d2;
-      const { stdout } = yield exec3.getExecOutput("sw_vers", void 0, {
+      const { stdout } = yield exec.getExecOutput("sw_vers", void 0, {
         silent: true
       });
       const version = (_b2 = (_a5 = stdout.match(/ProductVersion:\s*(.+)/)) === null || _a5 === void 0 ? void 0 : _a5[1]) !== null && _b2 !== void 0 ? _b2 : "";
@@ -19563,7 +19563,7 @@ var require_platform = __commonJS({
       };
     });
     var getLinuxInfo = () => __awaiter2(void 0, void 0, void 0, function* () {
-      const { stdout } = yield exec3.getExecOutput("lsb_release", ["-i", "-r", "-s"], {
+      const { stdout } = yield exec.getExecOutput("lsb_release", ["-i", "-r", "-s"], {
         silent: true
       });
       const [name2, version] = stdout.trim().split("\n");
@@ -48678,9 +48678,6 @@ function parseInputs() {
   const sdConfigPath = sdConfigRaw ? path.join(workspace, sdConfigRaw) : null;
   const sdTransforms = core.getInput("sd-transforms").split(",").map((s) => s.trim()).filter((s) => s.length > 0);
   const sdOutputFormat = core.getInput("sd-output-format") || "json/nested";
-  const commitMessage = core.getInput("commit-message") || "chore: update design tokens from Figma";
-  const gitUserName = core.getInput("git-user-name") || "github-actions[bot]";
-  const gitUserEmail = core.getInput("git-user-email") || "github-actions[bot]@users.noreply.github.com";
   return {
     figmaToken,
     figmaFileId,
@@ -48689,43 +48686,8 @@ function parseInputs() {
     excludedCollections,
     sdConfigPath,
     sdTransforms,
-    sdOutputFormat,
-    commitMessage,
-    gitUserName,
-    gitUserEmail
+    sdOutputFormat
   };
-}
-
-// src/git.ts
-var exec = __toESM(require_exec(), 1);
-async function commitAndPush(paths, message, userName, userEmail) {
-  await exec.exec("git", ["config", "user.name", userName]);
-  await exec.exec("git", ["config", "user.email", userEmail]);
-  await exec.exec("git", ["add", ...paths]);
-  const exitCode = await exec.exec("git", ["diff", "--staged", "--quiet"], { ignoreReturnCode: true });
-  if (exitCode === 0) {
-    console.log("No token changes detected, skipping commit.");
-    return;
-  }
-  await exec.exec("git", ["commit", "-m", message]);
-  let pushOutput = "";
-  const pushExitCode = await exec.exec("git", ["push"], {
-    ignoreReturnCode: true,
-    listeners: {
-      stderr: (data) => {
-        pushOutput += data.toString();
-      }
-    }
-  });
-  if (pushExitCode !== 0) {
-    if (pushOutput.includes("non-fast-forward") || pushOutput.includes("rejected")) {
-      throw new Error(
-        "git push failed with a non-fast-forward error. Add a `concurrency:` group to your workflow to prevent parallel runs on the same branch."
-      );
-    }
-    throw new Error(`git push failed with exit code ${pushExitCode}:
-${pushOutput}`);
-  }
 }
 
 // src/style-dictionary.ts
@@ -85097,13 +85059,6 @@ async function main() {
     sdTransforms: inputs.sdTransforms,
     sdOutputFormat: inputs.sdOutputFormat
   });
-  core2.info("Committing changes");
-  await commitAndPush(
-    [inputs.tokensOutputPath, inputs.jsonOutputPath],
-    inputs.commitMessage,
-    inputs.gitUserName,
-    inputs.gitUserEmail
-  );
 }
 main().catch((err) => {
   core2.setFailed(err instanceof Error ? err.message : String(err));

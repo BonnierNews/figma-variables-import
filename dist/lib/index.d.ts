@@ -13,11 +13,5 @@ export interface SyncOptions {
     sdTransforms?: string[];
     /** Style Dictionary output format (default: json/nested) */
     sdOutputFormat?: string;
-    /** Commit message (default: "chore: update design tokens from Figma") */
-    commitMessage?: string;
-    /** Git user name for the commit (default: github-actions[bot]) */
-    gitUserName?: string;
-    /** Git user email for the commit (default: github-actions[bot]@users.noreply.github.com) */
-    gitUserEmail?: string;
 }
 export declare function syncFigmaTokens(options: SyncOptions): Promise<void>;

@@ -10,9 +10,6 @@ export interface ActionInputs {
   sdConfigPath: string | null;
   sdTransforms: string[];
   sdOutputFormat: string;
-  commitMessage: string;
-  gitUserName: string;
-  gitUserEmail: string;
 }
 
 export function parseInputs(): ActionInputs {
@@ -46,10 +43,6 @@ export function parseInputs(): ActionInputs {
 
   const sdOutputFormat = core.getInput("sd-output-format") || "json/nested";
 
-  const commitMessage = core.getInput("commit-message") || "chore: update design tokens from Figma";
-  const gitUserName = core.getInput("git-user-name") || "github-actions[bot]";
-  const gitUserEmail = core.getInput("git-user-email") || "github-actions[bot]@users.noreply.github.com";
-
   return {
     figmaToken,
     figmaFileId,
@@ -59,8 +52,5 @@ export function parseInputs(): ActionInputs {
     sdConfigPath,
     sdTransforms,
     sdOutputFormat,
-    commitMessage,
-    gitUserName,
-    gitUserEmail,
   };
 }
