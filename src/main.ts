@@ -22,7 +22,13 @@ async function main(): Promise<void> {
   writeTokenFiles(tokenFiles, inputs.tokensOutputPath);
 
   core.info(`Running Style Dictionary → ${inputs.jsonOutputPath}`);
-  await runStyleDictionary(inputs);
+  await runStyleDictionary({
+    tokensOutputPath: inputs.tokensOutputPath,
+    jsonOutputPath: inputs.jsonOutputPath,
+    sdConfigPath: inputs.sdConfigPath,
+    sdTransforms: inputs.sdTransforms,
+    sdOutputFormat: inputs.sdOutputFormat,
+  });
 
   core.info("Committing changes");
   await commitAndPush(

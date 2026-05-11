@@ -1,10 +1,15 @@
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import * as core from "@actions/core";
 import StyleDictionary from "style-dictionary";
 
-import type { ActionInputs } from "./inputs.ts";
+export interface StyleDictionaryOptions {
+  tokensOutputPath: string;
+  jsonOutputPath: string;
+  sdConfigPath: string | null;
+  sdTransforms: string[];
+  sdOutputFormat: string;
+}
 
 function getCollections(tokensDir: string): string[] {
   if (!fs.existsSync(tokensDir)) return [];
@@ -119,18 +124,10 @@ async function buildBrandCollection(
   await sd.buildAllPlatforms();
 }
 
-export async function runStyleDictionary(inputs: ActionInputs): Promise<void> {
-  const { tokensOutputPath, jsonOutputPath, sdConfigPath, sdTransforms, sdOutputFormat } = inputs;
+export async function runStyleDictionary(options: StyleDictionaryOptions): Promise<void> {
+  const { tokensOutputPath, jsonOutputPath, sdConfigPath, sdTransforms, sdOutputFormat } = options;
 
   if (sdConfigPath) {
-    const sdTransformsInput = inputs.sdTransforms.join(",");
-    const sdOutputFormatInput = inputs.sdOutputFormat;
-    if (sdTransformsInput !== "attribute/cti,name/kebab,size/rem" || sdOutputFormatInput !== "json/nested") {
-      core.warning(
-        "style-dictionary-config is set; sd-transforms and sd-output-format are ignored."
-      );
-    }
-
     let config: unknown;
     if (sdConfigPath.endsWith(".json")) {
       config = JSON.parse(fs.readFileSync(sdConfigPath, "utf-8")) as unknown;
@@ -145,7 +142,7 @@ export async function runStyleDictionary(inputs: ActionInputs): Promise<void> {
   }
 
   const collections = getCollections(tokensOutputPath);
-  core.info(`Style Dictionary: processing collections: ${collections.join(", ")}`);
+  console.log(`Style Dictionary: processing collections: ${collections.join(", ")}`);
 
   const allTokenFiles = collectAllTokenFiles(tokensOutputPath);
 
@@ -169,7 +166,7 @@ export async function runStyleDictionary(inputs: ActionInputs): Promise<void> {
         }
       }
     } catch (err) {
-      core.warning(`Style Dictionary failed for collection "${collection}": ${err instanceof Error ? err.message : String(err)}`);
+      console.warn(`Style Dictionary failed for collection "${collection}": ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 }

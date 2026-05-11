@@ -22,7 +22,7 @@
   "scripts": {
     "build": "npm run build:action && npm run build:package",
     "build:action": "esbuild src/main.ts --bundle --platform=node --format=esm --banner:js=\"import{createRequire}from'module';const require=createRequire(import.meta.url);\" --outfile=dist/index.js",
-    "build:package": "esbuild src/index.ts --bundle --platform=node --format=esm --external:@figma/rest-api-spec --outfile=dist/lib/index.js && tsc --project tsconfig.build.json",
+    "build:package": "esbuild src/index.ts --bundle --platform=node --format=esm --external:@figma/rest-api-spec --external:style-dictionary --external:@actions/exec --outfile=dist/lib/index.js && tsc --project tsconfig.build.json",
     "prepublishOnly": "npm run build:package",
     "tsc": "tsc --noEmit",
     "lint": "eslint ."

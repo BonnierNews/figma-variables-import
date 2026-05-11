@@ -17594,12 +17594,12 @@ var require_lib = __commonJS({
             throw new Error("Client has already been disposed.");
           }
           const parsedUrl = new URL(requestUrl);
-          let info4 = this._prepareRequest(verb, parsedUrl, headers);
+          let info2 = this._prepareRequest(verb, parsedUrl, headers);
           const maxTries = this._allowRetries && RetryableHttpVerbs.includes(verb) ? this._maxRetries + 1 : 1;
           let numTries = 0;
           let response;
           do {
-            response = yield this.requestRaw(info4, data);
+            response = yield this.requestRaw(info2, data);
             if (response && response.message && response.message.statusCode === HttpCodes.Unauthorized) {
               let authenticationHandler;
               for (const handler of this.handlers) {
@@ -17609,7 +17609,7 @@ var require_lib = __commonJS({
                 }
               }
               if (authenticationHandler) {
-                return authenticationHandler.handleAuthentication(this, info4, data);
+                return authenticationHandler.handleAuthentication(this, info2, data);
               } else {
                 return response;
               }
@@ -17632,8 +17632,8 @@ var require_lib = __commonJS({
                   }
                 }
               }
-              info4 = this._prepareRequest(verb, parsedRedirectUrl, headers);
-              response = yield this.requestRaw(info4, data);
+              info2 = this._prepareRequest(verb, parsedRedirectUrl, headers);
+              response = yield this.requestRaw(info2, data);
               redirectsRemaining--;
             }
             if (!response.message.statusCode || !HttpResponseRetryCodes.includes(response.message.statusCode)) {
@@ -17662,7 +17662,7 @@ var require_lib = __commonJS({
        * @param info
        * @param data
        */
-      requestRaw(info4, data) {
+      requestRaw(info2, data) {
         return __awaiter2(this, void 0, void 0, function* () {
           return new Promise((resolve4, reject) => {
             function callbackForResult(err, res) {
@@ -17674,7 +17674,7 @@ var require_lib = __commonJS({
                 resolve4(res);
               }
             }
-            this.requestRawWithCallback(info4, data, callbackForResult);
+            this.requestRawWithCallback(info2, data, callbackForResult);
           });
         });
       }
@@ -17684,12 +17684,12 @@ var require_lib = __commonJS({
        * @param data
        * @param onResult
        */
-      requestRawWithCallback(info4, data, onResult) {
+      requestRawWithCallback(info2, data, onResult) {
         if (typeof data === "string") {
-          if (!info4.options.headers) {
-            info4.options.headers = {};
+          if (!info2.options.headers) {
+            info2.options.headers = {};
           }
-          info4.options.headers["Content-Length"] = Buffer.byteLength(data, "utf8");
+          info2.options.headers["Content-Length"] = Buffer.byteLength(data, "utf8");
         }
         let callbackCalled = false;
         function handleResult(err, res) {
@@ -17698,7 +17698,7 @@ var require_lib = __commonJS({
             onResult(err, res);
           }
         }
-        const req = info4.httpModule.request(info4.options, (msg) => {
+        const req = info2.httpModule.request(info2.options, (msg) => {
           const res = new HttpClientResponse(msg);
           handleResult(void 0, res);
         });
@@ -17710,7 +17710,7 @@ var require_lib = __commonJS({
           if (socket) {
             socket.end();
           }
-          handleResult(new Error(`Request timeout: ${info4.options.path}`));
+          handleResult(new Error(`Request timeout: ${info2.options.path}`));
         });
         req.on("error", function(err) {
           handleResult(err);
@@ -17746,27 +17746,27 @@ var require_lib = __commonJS({
         return this._getProxyAgentDispatcher(parsedUrl, proxyUrl);
       }
       _prepareRequest(method, requestUrl, headers) {
-        const info4 = {};
-        info4.parsedUrl = requestUrl;
-        const usingSsl = info4.parsedUrl.protocol === "https:";
-        info4.httpModule = usingSsl ? https : http;
+        const info2 = {};
+        info2.parsedUrl = requestUrl;
+        const usingSsl = info2.parsedUrl.protocol === "https:";
+        info2.httpModule = usingSsl ? https : http;
         const defaultPort = usingSsl ? 443 : 80;
-        info4.options = {};
-        info4.options.host = info4.parsedUrl.hostname;
-        info4.options.port = info4.parsedUrl.port ? parseInt(info4.parsedUrl.port) : defaultPort;
-        info4.options.path = (info4.parsedUrl.pathname || "") + (info4.parsedUrl.search || "");
-        info4.options.method = method;
-        info4.options.headers = this._mergeHeaders(headers);
+        info2.options = {};
+        info2.options.host = info2.parsedUrl.hostname;
+        info2.options.port = info2.parsedUrl.port ? parseInt(info2.parsedUrl.port) : defaultPort;
+        info2.options.path = (info2.parsedUrl.pathname || "") + (info2.parsedUrl.search || "");
+        info2.options.method = method;
+        info2.options.headers = this._mergeHeaders(headers);
         if (this.userAgent != null) {
-          info4.options.headers["user-agent"] = this.userAgent;
+          info2.options.headers["user-agent"] = this.userAgent;
         }
-        info4.options.agent = this._getAgent(info4.parsedUrl);
+        info2.options.agent = this._getAgent(info2.parsedUrl);
         if (this.handlers) {
           for (const handler of this.handlers) {
-            handler.prepareRequest(info4.options);
+            handler.prepareRequest(info2.options);
           }
         }
-        return info4;
+        return info2;
       }
       _mergeHeaders(headers) {
         if (this.requestOptions && this.requestOptions.headers) {
@@ -19748,18 +19748,18 @@ Support boolean input list: \`true | True | TRUE | false | False | FALSE\``);
       (0, command_1.issueCommand)("error", (0, utils_1.toCommandProperties)(properties), message instanceof Error ? message.toString() : message);
     }
     exports.error = error2;
-    function warning2(message, properties = {}) {
+    function warning(message, properties = {}) {
       (0, command_1.issueCommand)("warning", (0, utils_1.toCommandProperties)(properties), message instanceof Error ? message.toString() : message);
     }
-    exports.warning = warning2;
+    exports.warning = warning;
     function notice(message, properties = {}) {
       (0, command_1.issueCommand)("notice", (0, utils_1.toCommandProperties)(properties), message instanceof Error ? message.toString() : message);
     }
     exports.notice = notice;
-    function info4(message) {
+    function info2(message) {
       process.stdout.write(message + os4.EOL);
     }
-    exports.info = info4;
+    exports.info = info2;
     function startGroup(name2) {
       (0, command_1.issue)("group", name2);
     }
@@ -48638,7 +48638,7 @@ ${Me4.join(`
 });
 
 // src/main.ts
-var core4 = __toESM(require_core(), 1);
+var core2 = __toESM(require_core(), 1);
 
 // src/figma-api.ts
 var FIGMA_API_BASE = "https://api.figma.com/v1";
@@ -48697,7 +48697,6 @@ function parseInputs() {
 }
 
 // src/git.ts
-var core2 = __toESM(require_core(), 1);
 var exec = __toESM(require_exec(), 1);
 async function commitAndPush(paths, message, userName, userEmail) {
   await exec.exec("git", ["config", "user.name", userName]);
@@ -48705,7 +48704,7 @@ async function commitAndPush(paths, message, userName, userEmail) {
   await exec.exec("git", ["add", ...paths]);
   const exitCode = await exec.exec("git", ["diff", "--staged", "--quiet"], { ignoreReturnCode: true });
   if (exitCode === 0) {
-    core2.info("No token changes detected, skipping commit.");
+    console.log("No token changes detected, skipping commit.");
     return;
   }
   await exec.exec("git", ["commit", "-m", message]);
@@ -48730,7 +48729,6 @@ ${pushOutput}`);
 }
 
 // src/style-dictionary.ts
-var core3 = __toESM(require_core(), 1);
 import fs5 from "node:fs";
 import path3 from "node:path";
 import { pathToFileURL } from "node:url";
@@ -56524,8 +56522,8 @@ var require_events2 = __commonJS2({
         return Object.getOwnPropertyNames(target);
       };
     }
-    function ProcessEmitWarning(warning2) {
-      if (console && console.warn) console.warn(warning2);
+    function ProcessEmitWarning(warning) {
+      if (console && console.warn) console.warn(warning);
     }
     var NumberIsNaN = Number.isNaN || function NumberIsNaN2(value2) {
       return value2 !== value2;
@@ -69197,11 +69195,11 @@ function _resolveReferences(value2, tokenMap, {
             foundCirc[key] = true;
           });
           circStack.push(ref);
-          const warning2 = `Circular definition cycle for ${current_context ?? ""} => ${circStack.join(", ")}`;
+          const warning = `Circular definition cycle for ${current_context ?? ""} => ${circStack.join(", ")}`;
           if (warnImmediately) {
-            throw new Error(warning2);
+            throw new Error(warning);
           } else {
-            groupMessages_default.add(PROPERTY_REFERENCE_WARNINGS, warning2);
+            groupMessages_default.add(PROPERTY_REFERENCE_WARNINGS, warning);
           }
         } else {
           const nestedRef = _resolveReferences(ref, tokenMap, {
@@ -69219,11 +69217,11 @@ function _resolveReferences(value2, tokenMap, {
         to_ret = replaceMatchWithRef(ref);
       }
     } else {
-      const warning2 = `${current_context ? `${current_context} ` : ""}tries to reference ${value2}, which is not defined.`;
+      const warning = `${current_context ? `${current_context} ` : ""}tries to reference ${value2}, which is not defined.`;
       if (warnImmediately) {
-        throw new Error(warning2);
+        throw new Error(warning);
       } else {
-        groupMessages_default.add(PROPERTY_REFERENCE_WARNINGS, warning2);
+        groupMessages_default.add(PROPERTY_REFERENCE_WARNINGS, warning);
       }
     }
     stack.pop();
@@ -84571,8 +84569,8 @@ ${verbosityInfo}`;
         logObj.success.forEach((success) => {
           console.log(success);
         });
-        logObj.warning.forEach((warning2) => {
-          console.log(warning2);
+        logObj.warning.forEach((warning) => {
+          console.log(warning);
         });
       }
     }
@@ -84762,16 +84760,9 @@ async function buildBrandCollection(tokensDir, jsonOutputDir, collection, brand,
   });
   await sd2.buildAllPlatforms();
 }
-async function runStyleDictionary(inputs) {
-  const { tokensOutputPath, jsonOutputPath, sdConfigPath, sdTransforms, sdOutputFormat } = inputs;
+async function runStyleDictionary(options) {
+  const { tokensOutputPath, jsonOutputPath, sdConfigPath, sdTransforms, sdOutputFormat } = options;
   if (sdConfigPath) {
-    const sdTransformsInput = inputs.sdTransforms.join(",");
-    const sdOutputFormatInput = inputs.sdOutputFormat;
-    if (sdTransformsInput !== "attribute/cti,name/kebab,size/rem" || sdOutputFormatInput !== "json/nested") {
-      core3.warning(
-        "style-dictionary-config is set; sd-transforms and sd-output-format are ignored."
-      );
-    }
     let config2;
     if (sdConfigPath.endsWith(".json")) {
       config2 = JSON.parse(fs5.readFileSync(sdConfigPath, "utf-8"));
@@ -84784,7 +84775,7 @@ async function runStyleDictionary(inputs) {
     return;
   }
   const collections = getCollections(tokensOutputPath);
-  core3.info(`Style Dictionary: processing collections: ${collections.join(", ")}`);
+  console.log(`Style Dictionary: processing collections: ${collections.join(", ")}`);
   const allTokenFiles = collectAllTokenFiles(tokensOutputPath);
   for (const collection of collections) {
     const modes = getModesForCollection(tokensOutputPath, collection);
@@ -84805,7 +84796,7 @@ async function runStyleDictionary(inputs) {
         }
       }
     } catch (err) {
-      core3.warning(`Style Dictionary failed for collection "${collection}": ${err instanceof Error ? err.message : String(err)}`);
+      console.warn(`Style Dictionary failed for collection "${collection}": ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 }
@@ -85091,16 +85082,22 @@ function writeTokenFiles(files, baseDir) {
 // src/main.ts
 async function main() {
   const inputs = parseInputs();
-  core4.info(`Fetching variables from Figma file: ${inputs.figmaFileId}`);
+  core2.info(`Fetching variables from Figma file: ${inputs.figmaFileId}`);
   const rawData = await getLocalVariables(inputs.figmaFileId, inputs.figmaToken);
   const { variableCollections, variables } = rawData.meta;
-  core4.info(`Collections: ${Object.keys(variableCollections).length}, Variables: ${Object.keys(variables).length}`);
+  core2.info(`Collections: ${Object.keys(variableCollections).length}, Variables: ${Object.keys(variables).length}`);
   const tokenFiles = tokenFilesFromLocalVariables(rawData, inputs.excludedCollections);
-  core4.info(`Writing token files to ${inputs.tokensOutputPath}`);
+  core2.info(`Writing token files to ${inputs.tokensOutputPath}`);
   writeTokenFiles(tokenFiles, inputs.tokensOutputPath);
-  core4.info(`Running Style Dictionary \u2192 ${inputs.jsonOutputPath}`);
-  await runStyleDictionary(inputs);
-  core4.info("Committing changes");
+  core2.info(`Running Style Dictionary \u2192 ${inputs.jsonOutputPath}`);
+  await runStyleDictionary({
+    tokensOutputPath: inputs.tokensOutputPath,
+    jsonOutputPath: inputs.jsonOutputPath,
+    sdConfigPath: inputs.sdConfigPath,
+    sdTransforms: inputs.sdTransforms,
+    sdOutputFormat: inputs.sdOutputFormat
+  });
+  core2.info("Committing changes");
   await commitAndPush(
     [inputs.tokensOutputPath, inputs.jsonOutputPath],
     inputs.commitMessage,
@@ -85109,7 +85106,7 @@ async function main() {
   );
 }
 main().catch((err) => {
-  core4.setFailed(err instanceof Error ? err.message : String(err));
+  core2.setFailed(err instanceof Error ? err.message : String(err));
 });
 /*! Bundled license information:
 

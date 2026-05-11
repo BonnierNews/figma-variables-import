@@ -1,4 +1,3 @@
-import * as core from "@actions/core";
 import * as exec from "@actions/exec";
 
 export async function commitAndPush(
@@ -13,7 +12,7 @@ export async function commitAndPush(
 
   const exitCode = await exec.exec("git", [ "diff", "--staged", "--quiet" ], { ignoreReturnCode: true });
   if (exitCode === 0) {
-    core.info("No token changes detected, skipping commit.");
+    console.log("No token changes detected, skipping commit.");
     return;
   }
 

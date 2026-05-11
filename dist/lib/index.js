@@ -15,6 +15,165 @@ ${errorText}`
   return response.json();
 }
 
+// src/git.ts
+import * as exec from "@actions/exec";
+async function commitAndPush(paths, message, userName, userEmail) {
+  await exec.exec("git", ["config", "user.name", userName]);
+  await exec.exec("git", ["config", "user.email", userEmail]);
+  await exec.exec("git", ["add", ...paths]);
+  const exitCode = await exec.exec("git", ["diff", "--staged", "--quiet"], { ignoreReturnCode: true });
+  if (exitCode === 0) {
+    console.log("No token changes detected, skipping commit.");
+    return;
+  }
+  await exec.exec("git", ["commit", "-m", message]);
+  let pushOutput = "";
+  const pushExitCode = await exec.exec("git", ["push"], {
+    ignoreReturnCode: true,
+    listeners: {
+      stderr: (data) => {
+        pushOutput += data.toString();
+      }
+    }
+  });
+  if (pushExitCode !== 0) {
+    if (pushOutput.includes("non-fast-forward") || pushOutput.includes("rejected")) {
+      throw new Error(
+        "git push failed with a non-fast-forward error. Add a `concurrency:` group to your workflow to prevent parallel runs on the same branch."
+      );
+    }
+    throw new Error(`git push failed with exit code ${pushExitCode}:
+${pushOutput}`);
+  }
+}
+
+// src/style-dictionary.ts
+import fs from "node:fs";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
+import StyleDictionary from "style-dictionary";
+function getCollections(tokensDir) {
+  if (!fs.existsSync(tokensDir)) return [];
+  return fs.readdirSync(tokensDir, { withFileTypes: true }).filter((e) => e.isDirectory() && !e.name.startsWith(".")).filter((e) => fs.readdirSync(path.join(tokensDir, e.name)).some((f) => f.endsWith(".json"))).map((e) => e.name);
+}
+function getModesForCollection(tokensDir, collection) {
+  return fs.readdirSync(path.join(tokensDir, collection)).filter((f) => f.endsWith(".json")).map((f) => f.replace(".json", ""));
+}
+function getBrandsForCollection(tokensDir, collection) {
+  const colDir = path.join(tokensDir, collection);
+  const brands = [];
+  const walk = (dir, prefix) => {
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const relPath = prefix ? `${prefix}/${entry.name}` : entry.name;
+      brands.push(relPath);
+      walk(path.join(dir, entry.name), relPath);
+    }
+  };
+  walk(colDir, "");
+  return brands;
+}
+function getBaseCollectionPaths(tokensDir, collection, mode) {
+  const filePath = path.join(tokensDir, collection, `${mode}.json`);
+  if (!fs.existsSync(filePath)) return /* @__PURE__ */ new Set();
+  const paths = /* @__PURE__ */ new Set();
+  const collect = (obj, currentPath = []) => {
+    for (const [key, value] of Object.entries(obj)) {
+      if (typeof value === "object" && value !== null && "$type" in value) {
+        paths.add([...currentPath, key].join("."));
+      } else if (typeof value === "object" && value !== null) {
+        collect(value, [...currentPath, key]);
+      }
+    }
+  };
+  collect(JSON.parse(fs.readFileSync(filePath, "utf-8")));
+  return paths;
+}
+function collectAllTokenFiles(dir) {
+  const files = [];
+  const walk = (d) => {
+    for (const entry of fs.readdirSync(d, { withFileTypes: true })) {
+      if (entry.isDirectory() && !entry.name.startsWith(".")) {
+        walk(path.join(d, entry.name));
+      } else if (entry.name.endsWith(".json")) {
+        files.push(path.join(d, entry.name));
+      }
+    }
+  };
+  if (fs.existsSync(dir)) walk(dir);
+  return files;
+}
+async function buildBrandCollection(tokensDir, jsonOutputDir, collection, brand, mode, allTokenFiles, sdTransforms, sdOutputFormat) {
+  const baseFile = path.join(tokensDir, collection, `${mode}.json`);
+  if (!fs.existsSync(baseFile)) return;
+  const brandFile = brand === "base" ? baseFile : path.join(tokensDir, collection, brand, `${mode}.json`);
+  if (!fs.existsSync(brandFile)) return;
+  const buildPath = brand === "base" ? `${path.join(jsonOutputDir, collection)}/` : `${path.join(jsonOutputDir, collection, brand)}/`;
+  const basePaths = getBaseCollectionPaths(tokensDir, collection, mode);
+  const otherFiles = allTokenFiles.filter((f) => f !== baseFile && f !== brandFile);
+  const sd = new StyleDictionary({
+    include: brand === "base" ? otherFiles : [...otherFiles, baseFile],
+    source: [brandFile],
+    platforms: {
+      output: {
+        transforms: sdTransforms,
+        buildPath,
+        files: [
+          {
+            destination: `${mode}.json`,
+            format: sdOutputFormat,
+            filter: (token) => basePaths.has(token.path.join(".")),
+            options: { outputReferences: false }
+          }
+        ]
+      }
+    },
+    log: { verbosity: "silent", errors: { brokenReferences: "console" } }
+  });
+  await sd.buildAllPlatforms();
+}
+async function runStyleDictionary(options) {
+  const { tokensOutputPath, jsonOutputPath, sdConfigPath, sdTransforms, sdOutputFormat } = options;
+  if (sdConfigPath) {
+    let config;
+    if (sdConfigPath.endsWith(".json")) {
+      config = JSON.parse(fs.readFileSync(sdConfigPath, "utf-8"));
+    } else {
+      const mod = await import(pathToFileURL(sdConfigPath).href);
+      config = mod.default ?? mod;
+    }
+    const sd = new StyleDictionary(config);
+    await sd.buildAllPlatforms();
+    return;
+  }
+  const collections = getCollections(tokensOutputPath);
+  console.log(`Style Dictionary: processing collections: ${collections.join(", ")}`);
+  const allTokenFiles = collectAllTokenFiles(tokensOutputPath);
+  for (const collection of collections) {
+    const modes = getModesForCollection(tokensOutputPath, collection);
+    const brands = ["base", ...getBrandsForCollection(tokensOutputPath, collection)];
+    try {
+      for (const brand of brands) {
+        for (const mode of modes) {
+          await buildBrandCollection(
+            tokensOutputPath,
+            jsonOutputPath,
+            collection,
+            brand,
+            mode,
+            allTokenFiles,
+            sdTransforms,
+            sdOutputFormat
+          );
+        }
+      }
+    } catch (err) {
+      console.warn(`Style Dictionary failed for collection "${collection}": ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+}
+
 // src/utils.ts
 function rgbToHex({ r, g, b, a }) {
   const toHex = (value) => {
@@ -278,28 +437,43 @@ function tokenFilesFromLocalVariables(localVariablesResponse, excludedCollection
 }
 
 // src/write-tokens.ts
-import fs from "node:fs";
-import path from "node:path";
+import fs2 from "node:fs";
+import path2 from "node:path";
 function writeTokenFiles(files, baseDir) {
-  fs.rmSync(baseDir, { recursive: true, force: true });
+  fs2.rmSync(baseDir, { recursive: true, force: true });
   for (const [name, tokenFiles] of Object.entries(files)) {
     const entries = Object.entries(tokenFiles);
     if (entries.length === 0) continue;
-    const dir = path.join(baseDir, name);
-    fs.mkdirSync(dir, { recursive: true });
+    const dir = path2.join(baseDir, name);
+    fs2.mkdirSync(dir, { recursive: true });
     for (const [fileName, content] of entries) {
-      fs.writeFileSync(path.join(dir, fileName), JSON.stringify(content, null, 2));
+      fs2.writeFileSync(path2.join(dir, fileName), JSON.stringify(content, null, 2));
     }
   }
 }
+
+// src/index.ts
+async function syncFigmaTokens(options) {
+  const {
+    figmaToken,
+    figmaFileId,
+    tokensOutputPath,
+    jsonOutputPath,
+    excludedCollections = /* @__PURE__ */ new Set(),
+    sdConfigPath = null,
+    sdTransforms = ["attribute/cti", "name/kebab", "size/rem"],
+    sdOutputFormat = "json/nested",
+    commitMessage = "chore: update design tokens from Figma",
+    gitUserName = "github-actions[bot]",
+    gitUserEmail = "github-actions[bot]@users.noreply.github.com"
+  } = options;
+  const excludedSet = Array.isArray(excludedCollections) ? new Set(excludedCollections) : excludedCollections;
+  const rawData = await getLocalVariables(figmaFileId, figmaToken);
+  const tokenFiles = tokenFilesFromLocalVariables(rawData, excludedSet);
+  writeTokenFiles(tokenFiles, tokensOutputPath);
+  await runStyleDictionary({ tokensOutputPath, jsonOutputPath, sdConfigPath, sdTransforms, sdOutputFormat });
+  await commitAndPush([tokensOutputPath, jsonOutputPath], commitMessage, gitUserName, gitUserEmail);
+}
 export {
-  collectReferencedVariableIds,
-  generateTokenForVariable,
-  getLocalVariables,
-  getVariableValueForMode,
-  rgbToHex,
-  tokenFilesFromLocalVariables,
-  tokenTypeFromVariable,
-  tokenValueFromVariable,
-  writeTokenFiles
+  syncFigmaTokens
 };
