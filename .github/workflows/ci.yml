@@ -33,7 +33,8 @@ jobs:
 
       - name: Check dist is up to date
         run: |
-          if ! git diff --exit-code dist/index.js; then
-            echo "dist/index.js is stale. Run 'npm run build' and commit the result."
+          git add dist/
+          if ! git diff --staged --quiet -- dist/; then
+            echo "dist/ is stale. Run 'npm run build' and commit the result."
             exit 1
           fi

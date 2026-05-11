@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write
+  packages: write
 
 jobs:
   release:
@@ -20,6 +21,7 @@ jobs:
         with:
           node-version: "22"
           cache: npm
+          registry-url: https://npm.pkg.github.com
 
       - run: npm ci
 
@@ -37,15 +39,28 @@ jobs:
             git push
           fi
 
+      - name: Check if version already released
+        id: check
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          if git ls-remote --tags origin "refs/tags/v${VERSION}" | grep -q "v${VERSION}"; then
+            echo "v${VERSION} already released, skipping."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish to npm
+        if: steps.check.outputs.skip != 'true'
+        run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Tag release
+        if: steps.check.outputs.skip != 'true'
         run: |
           VERSION=$(node -p "require('./package.json').version")
           MAJOR=$(echo "$VERSION" | cut -d. -f1)
-
-          if git ls-remote --tags origin "refs/tags/v${VERSION}" | grep -q "v${VERSION}"; then
-            echo "v${VERSION} already released, skipping."
-            exit 0
-          fi
 
           git tag "v${VERSION}"
           git tag "v${MAJOR}" --force

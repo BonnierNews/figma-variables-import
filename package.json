@@ -1,13 +1,29 @@
 {
-  "name": "figma-tokens-action",
+  "name": "@bonniernews/figma-tokens-action",
   "version": "1.0.0",
-  "private": true,
   "type": "module",
   "engines": {
     "node": ">=22.0.0"
   },
+  "exports": {
+    ".": {
+      "import": "./dist/lib/index.js",
+      "types": "./dist/lib/index.d.ts"
+    }
+  },
+  "files": [
+    "dist/lib/",
+    "dist/index.js",
+    "action.yml"
+  ],
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
   "scripts": {
-    "build": "esbuild src/main.ts --bundle --platform=node --format=esm --banner:js=\"import{createRequire}from'module';const require=createRequire(import.meta.url);\" --outfile=dist/index.js",
+    "build": "npm run build:action && npm run build:package",
+    "build:action": "esbuild src/main.ts --bundle --platform=node --format=esm --banner:js=\"import{createRequire}from'module';const require=createRequire(import.meta.url);\" --outfile=dist/index.js",
+    "build:package": "esbuild src/index.ts --bundle --platform=node --format=esm --external:@figma/rest-api-spec --outfile=dist/lib/index.js && tsc --project tsconfig.build.json",
+    "prepublishOnly": "npm run build:package",
     "tsc": "tsc --noEmit",
     "lint": "eslint ."
   },
