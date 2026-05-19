@@ -1,5 +1,5 @@
 {
-  "name": "@bonniernews/figma-tokens-action",
+  "name": "@bonniernews/figma-tokens-import",
   "version": "1.0.0",
   "type": "module",
   "engines": {
