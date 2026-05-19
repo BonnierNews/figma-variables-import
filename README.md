@@ -152,13 +152,7 @@ cp example/env.example example/.env
 Then run:
 
 ```bash
-FIGMA_TOKEN=... FIGMA_FILE_ID=... bun run example/run.ts
-```
-
-Or with the `.env` file:
-
-```bash
-bun --env-file=example/.env run example/run.ts
+npm run example
 ```
 
 Output is written to `example/output/tokens/` (raw W3C token JSON) and `example/output/json/` (Style Dictionary output).
