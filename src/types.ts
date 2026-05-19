@@ -1,6 +1,8 @@
+export type TokenValue = string | number | boolean | Record<string, unknown> | Record<string, unknown>[];
+
 export interface Token {
   $type: string;
-  $value: string | number | boolean;
+  $value: TokenValue;
   $description?: string;
   $extensions?: {
     "com.figma": {

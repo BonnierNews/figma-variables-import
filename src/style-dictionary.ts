@@ -11,31 +11,58 @@ export interface StyleDictionaryOptions {
   sdOutputFormat: string;
 }
 
+// A directory is a "collection" if it has .json files directly and does NOT share mode names
+// with its parent. If mode names overlap with the parent, it is a brand of that parent instead.
 function getCollections(tokensDir: string): string[] {
   if (!fs.existsSync(tokensDir)) return [];
-  return fs.readdirSync(tokensDir, { withFileTypes: true })
-    .filter((e) => e.isDirectory() && !e.name.startsWith("."))
-    .filter((e) => fs.readdirSync(path.join(tokensDir, e.name)).some((f) => f.endsWith(".json")))
-    .map((e) => e.name);
+  const result: string[] = [];
+
+  const walk = (dir: string, relPath: string, parentModes: Set<string>): Set<string> => {
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    const myModes = new Set(
+      entries
+        .filter((e) => !e.isDirectory() && e.name.endsWith(".json"))
+        .map((e) => e.name.replace(".json", ""))
+    );
+    const isCollection = myModes.size > 0 && [ ...myModes ].every((m) => !parentModes.has(m));
+    if (isCollection && relPath !== "") result.push(relPath);
+
+    const modesForChildren = isCollection ? myModes : parentModes;
+    for (const entry of entries.filter((e) => e.isDirectory() && !e.name.startsWith("."))) {
+      walk(path.join(dir, entry.name), relPath ? `${relPath}/${entry.name}` : entry.name, modesForChildren);
+    }
+    return myModes;
+  };
+
+  walk(tokensDir, "", new Set());
+  return result;
 }
 
 function getModesForCollection(tokensDir: string, collection: string): string[] {
-  return fs.readdirSync(path.join(tokensDir, collection))
-    .filter((f) => f.endsWith(".json"))
-    .map((f) => f.replace(".json", ""));
+  return fs.readdirSync(path.join(tokensDir, collection), { withFileTypes: true })
+    .filter((e) => !e.isDirectory() && e.name.endsWith(".json"))
+    .map((e) => e.name.replace(".json", ""));
 }
 
 function getBrandsForCollection(tokensDir: string, collection: string): string[] {
   const colDir = path.join(tokensDir, collection);
+  const collectionModes = new Set(getModesForCollection(tokensDir, collection));
   const brands: string[] = [];
 
   const walk = (dir: string, prefix: string): void => {
-    const entries = fs.readdirSync(dir, { withFileTypes: true });
-    for (const entry of entries) {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
       if (!entry.isDirectory()) continue;
       const relPath = prefix ? `${prefix}/${entry.name}` : entry.name;
-      brands.push(relPath);
-      walk(path.join(dir, entry.name), relPath);
+      const subModes = new Set(
+        fs.readdirSync(path.join(dir, entry.name), { withFileTypes: true })
+          .filter((e) => !e.isDirectory() && e.name.endsWith(".json"))
+          .map((e) => e.name.replace(".json", ""))
+      );
+      // Only treat as brand if its modes overlap with the collection's modes
+      if ([ ...subModes ].some((m) => collectionModes.has(m))) {
+        brands.push(relPath);
+        walk(path.join(dir, entry.name), relPath);
+      }
     }
   };
 
@@ -126,6 +153,8 @@ async function buildBrandCollection(
 
 export async function runStyleDictionary(options: StyleDictionaryOptions): Promise<void> {
   const { tokensOutputPath, jsonOutputPath, sdConfigPath, sdTransforms, sdOutputFormat } = options;
+
+  fs.rmSync(jsonOutputPath, { recursive: true, force: true });
 
   if (sdConfigPath) {
     let config: unknown;

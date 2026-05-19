@@ -1,9 +1,11 @@
 import * as core from "@actions/core";
 
+import type { BrandTokenFiles } from "./types.ts";
 import { getLocalVariables } from "./figma-api.ts";
 import { parseInputs } from "./inputs.ts";
 import { runStyleDictionary } from "./style-dictionary.ts";
 import { tokenFilesFromLocalVariables } from "./token-generation.ts";
+import { tokenFilesFromStyles } from "./style-generation.ts";
 import { writeTokenFiles } from "./write-tokens.ts";
 
 async function main(): Promise<void> {
@@ -15,7 +17,16 @@ async function main(): Promise<void> {
   const { variableCollections, variables } = rawData.meta;
   core.info(`Collections: ${Object.keys(variableCollections).length}, Variables: ${Object.keys(variables).length}`);
 
-  const tokenFiles = tokenFilesFromLocalVariables(rawData, inputs.excludedCollections);
+  const variableTokenFiles = tokenFilesFromLocalVariables(rawData, inputs.excludedCollections);
+  const tokenFiles: BrandTokenFiles = {};
+  for (const [ key, value ] of Object.entries(variableTokenFiles)) {
+    tokenFiles[`variables/${key}`] = value;
+  }
+
+  core.info(`Fetching styles from Figma file: ${inputs.figmaFileId}`);
+  const styleTokenFiles = await tokenFilesFromStyles(inputs.figmaFileId, inputs.figmaToken, rawData);
+  core.info(`Styles: ${Object.keys(styleTokenFiles).join(", ")}`);
+  Object.assign(tokenFiles, styleTokenFiles);
 
   core.info(`Writing token files to ${inputs.tokensOutputPath}`);
   writeTokenFiles(tokenFiles, inputs.tokensOutputPath);

@@ -25,7 +25,8 @@
     "build:package": "esbuild src/index.ts --bundle --platform=node --format=esm --external:@figma/rest-api-spec --external:style-dictionary --external:@actions/exec --outfile=dist/lib/index.js && tsc --project tsconfig.build.json",
     "prepublishOnly": "npm run build:package",
     "tsc": "tsc --noEmit",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "run-example": "node --env-file=example/.env example/run.ts"
   },
   "dependencies": {
     "@actions/core": "^1.10.0",
