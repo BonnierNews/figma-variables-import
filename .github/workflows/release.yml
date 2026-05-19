@@ -2,8 +2,8 @@ name: Release
 
 on:
   push:
-    branches:
-      - main
+    tags:
+      - 'v*'
 
 permissions:
   contents: write
@@ -14,8 +14,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: actions/setup-node@v4
         with:
@@ -27,34 +25,19 @@ jobs:
 
       - run: npm run build
 
-      - name: Check if version already released
-        id: check
-        run: |
-          VERSION=$(node -p "require('./package.json').version")
-          if git ls-remote --tags origin "refs/tags/${VERSION}" | grep -q "${VERSION}"; then
-            echo "${VERSION} already released, skipping."
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "skip=false" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: Publish to npm
-        if: steps.check.outputs.skip != 'true'
         run: npm publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Tag and release
-        if: steps.check.outputs.skip != 'true'
+      - name: Create GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          VERSION=$(node -p "require('./package.json').version")
-          MAJOR=$(echo "$VERSION" | cut -d. -f1)
+          TAG="${{ github.ref_name }}"
+          MAJOR="v$(echo "$TAG" | sed 's/^v//' | cut -d. -f1)"
 
-          git tag "${VERSION}"
-          git tag "${MAJOR}" --force
-          git push origin "${VERSION}"
-          git push origin "${MAJOR}" --force
+          git tag "$MAJOR" --force
+          git push origin "$MAJOR" --force
 
-          gh release create "${VERSION}" --generate-notes
+          gh release create "$TAG" --generate-notes

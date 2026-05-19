@@ -127,6 +127,21 @@ If the SD config uses custom transforms or formats installed as npm packages, ad
 
 ---
 
+## Releasing
+
+1. Bump the version and create a git tag:
+   ```bash
+   npm version patch   # or minor / major
+   ```
+2. Push the tag:
+   ```bash
+   git push origin --tags
+   ```
+
+The release workflow publishes the package to npm and creates a GitHub release automatically when the tag is pushed.
+
+---
+
 ## Running the example
 
 ```bash
