@@ -127,6 +127,29 @@ If the SD config uses custom transforms or formats installed as npm packages, ad
 
 ---
 
+## Running the example
+
+```bash
+cp example/env.example example/.env
+# Edit example/.env and fill in FIGMA_TOKEN and FIGMA_FILE_ID
+```
+
+Then run:
+
+```bash
+FIGMA_TOKEN=... FIGMA_FILE_ID=... bun run example/run.ts
+```
+
+Or with the `.env` file:
+
+```bash
+bun --env-file=example/.env run example/run.ts
+```
+
+Output is written to `example/output/tokens/` (raw W3C token JSON) and `example/output/json/` (Style Dictionary output).
+
+---
+
 ## Implementation notes
 
 ### Collection hierarchy
