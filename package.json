@@ -26,7 +26,7 @@
     "prepublishOnly": "npm run build:package",
     "tsc": "tsc --noEmit",
     "lint": "eslint .",
-    "run-example": "node --env-file=example/.env example/run.ts"
+    "example": "node --env-file=example/.env example/run.ts"
   },
   "dependencies": {
     "@actions/core": "^1.10.0",

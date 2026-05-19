@@ -141,7 +141,7 @@ export function tokenFilesFromLocalVariables(
           generateTokenForVariable(
             variable,
             varMode.modeId,
-            mode.name,
+            varMode.name,
             null,
             variables,
             brandTokenFiles[varCollection.name]
