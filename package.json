@@ -1,6 +1,6 @@
 {
   "name": "@bonniernews/figma-tokens-import",
-  "version": "0.0.4",
+  "version": "0.0.0",
   "type": "module",
   "engines": {
     "node": ">=22.0.0"
