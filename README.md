@@ -48,8 +48,6 @@ Both output paths are optional, but at least one must be provided. Omitting `tok
 | `sdConfigPath` | no | — | Absolute path to a Style Dictionary v5 config file. Takes full precedence over `sdTransforms`/`sdOutputFormat` |
 | `sdTransforms` | no | `["attribute/cti", "name/kebab", "size/rem"]` | SD transforms to apply |
 | `sdOutputFormat` | no | `"json/nested"` | SD output format |
-| `cleanTokensOutput` | no | `false` | Delete `tokensOutputPath` before writing. |
-| `cleanJsonOutput` | no | `false` | Delete `jsonOutputPath` before running Style Dictionary. |
 
 \* At least one of `tokensOutputPath` or `jsonOutputPath` must be provided.
 
@@ -76,8 +74,6 @@ The calling workflow must:
 | `style-dictionary-config` | no | `""` | Path to a Style Dictionary v5 config file (relative to repo root). Takes full precedence — `sd-transforms` and `sd-output-format` are ignored when set |
 | `sd-transforms` | no | `attribute/cti,name/kebab,size/rem` | Comma-separated SD transform names. Used only when `style-dictionary-config` is not provided |
 | `sd-output-format` | no | `json/nested` | Style Dictionary output format. Used only when `style-dictionary-config` is not provided |
-| `clean-tokens-output` | no | `false` | When `true`, delete `tokens-output-path` before writing |
-| `clean-json-output` | no | `false` | When `true`, delete `json-output-path` before running Style Dictionary |
 
 \* At least one of `tokens-output-path` or `json-output-path` must be provided. Omitting `tokens-output-path` skips writing W3C token files; omitting `json-output-path` skips running Style Dictionary.
 

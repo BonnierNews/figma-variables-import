@@ -51,18 +51,6 @@ inputs:
       Example: "css/variables" or "json/nested"
     required: false
     default: "json/nested"
-  clean-tokens-output:
-    description: >
-      When "true", delete tokens-output-path before writing.
-      When "false" (default), files are written on top of any existing content.
-    required: false
-    default: "false"
-  clean-json-output:
-    description: >
-      When "true", delete json-output-path before running Style Dictionary.
-      When "false" (default), Style Dictionary writes on top of any existing content.
-    required: false
-    default: "false"
 
 runs:
   using: node20

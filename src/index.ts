@@ -25,10 +25,6 @@ export interface SyncOptions {
   sdTransforms?: string[];
   /** Style Dictionary output format (default: json/nested) */
   sdOutputFormat?: string;
-  /** Delete the tokens output directory before writing (default: false) */
-  cleanTokensOutput?: boolean;
-  /** Delete the JSON output directory before running Style Dictionary (default: false) */
-  cleanJsonOutput?: boolean;
 }
 
 export async function syncFigmaTokens(options: SyncOptions): Promise<void> {
@@ -42,8 +38,6 @@ export async function syncFigmaTokens(options: SyncOptions): Promise<void> {
     sdConfigPath = null,
     sdTransforms = [ "attribute/cti", "name/kebab", "size/rem" ],
     sdOutputFormat = "json/nested",
-    cleanTokensOutput = false,
-    cleanJsonOutput = false,
   } = options;
 
   if (!tokensOutputPath && !jsonOutputPath) {
@@ -71,7 +65,7 @@ export async function syncFigmaTokens(options: SyncOptions): Promise<void> {
     const tokensDir = tokensOutputPath
       ?? (tempTokensDir = fs.mkdtempSync(path.join(os.tmpdir(), "figma-tokens-")));
 
-    writeTokenFiles(tokenFiles, tokensDir, tokensOutputPath ? cleanTokensOutput : false);
+    writeTokenFiles(tokenFiles, tokensDir);
 
     if (jsonOutputPath) {
       await runStyleDictionary({
@@ -80,7 +74,6 @@ export async function syncFigmaTokens(options: SyncOptions): Promise<void> {
         sdConfigPath,
         sdTransforms,
         sdOutputFormat,
-        clean: cleanJsonOutput,
       });
     }
   } finally {
