@@ -10,8 +10,6 @@ export interface ActionInputs {
   sdConfigPath: string | null;
   sdTransforms: string[];
   sdOutputFormat: string;
-  cleanTokensOutput: boolean;
-  cleanJsonOutput: boolean;
 }
 
 export function parseInputs(): ActionInputs {
@@ -53,9 +51,6 @@ export function parseInputs(): ActionInputs {
 
   const sdOutputFormat = core.getInput("sd-output-format") || "json/nested";
 
-  const cleanTokensOutput = core.getInput("clean-tokens-output").trim().toLowerCase() === "true";
-  const cleanJsonOutput = core.getInput("clean-json-output").trim().toLowerCase() === "true";
-
   return {
     figmaToken,
     figmaFileId,
@@ -65,7 +60,5 @@ export function parseInputs(): ActionInputs {
     sdConfigPath,
     sdTransforms,
     sdOutputFormat,
-    cleanTokensOutput,
-    cleanJsonOutput,
   };
 }

@@ -3,8 +3,9 @@ import path from "node:path";
 
 import type { BrandTokenFiles } from "./types.ts";
 
-export function writeTokenFiles(files: BrandTokenFiles, baseDir: string, clean = false): void {
-  if (clean) fs.rmSync(baseDir, { recursive: true, force: true });
+export function writeTokenFiles(files: BrandTokenFiles, baseDir: string): void {
+  fs.rmSync(path.join(baseDir, "variables"), { recursive: true, force: true });
+  fs.rmSync(path.join(baseDir, "styles"), { recursive: true, force: true });
 
   for (const [ name, tokenFiles ] of Object.entries(files)) {
     const entries = Object.entries(tokenFiles);

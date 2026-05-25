@@ -41,7 +41,7 @@ async function main(): Promise<void> {
     } else {
       core.info("Skipping W3C token export (no tokens-output-path provided)");
     }
-    writeTokenFiles(tokenFiles, tokensDir, inputs.tokensOutputPath ? inputs.cleanTokensOutput : false);
+    writeTokenFiles(tokenFiles, tokensDir);
 
     if (inputs.jsonOutputPath) {
       core.info(`Running Style Dictionary → ${inputs.jsonOutputPath}`);
@@ -51,7 +51,6 @@ async function main(): Promise<void> {
         sdConfigPath: inputs.sdConfigPath,
         sdTransforms: inputs.sdTransforms,
         sdOutputFormat: inputs.sdOutputFormat,
-        clean: inputs.cleanJsonOutput,
       });
     } else {
       core.info("Skipping Style Dictionary (no json-output-path provided)");
