@@ -9,6 +9,7 @@ export interface StyleDictionaryOptions {
   sdConfigPath: string | null;
   sdTransforms: string[];
   sdOutputFormat: string;
+  clean?: boolean;
 }
 
 // A directory is a "collection" if it has .json files directly and does NOT share mode names
@@ -152,9 +153,9 @@ async function buildBrandCollection(
 }
 
 export async function runStyleDictionary(options: StyleDictionaryOptions): Promise<void> {
-  const { tokensOutputPath, jsonOutputPath, sdConfigPath, sdTransforms, sdOutputFormat } = options;
+  const { tokensOutputPath, jsonOutputPath, sdConfigPath, sdTransforms, sdOutputFormat, clean = false } = options;
 
-  fs.rmSync(jsonOutputPath, { recursive: true, force: true });
+  if (clean) fs.rmSync(jsonOutputPath, { recursive: true, force: true });
 
   if (sdConfigPath) {
     let config: unknown;

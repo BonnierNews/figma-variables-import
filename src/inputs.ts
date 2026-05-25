@@ -4,12 +4,14 @@ import * as core from "@actions/core";
 export interface ActionInputs {
   figmaToken: string;
   figmaFileId: string;
-  tokensOutputPath: string;
-  jsonOutputPath: string;
+  tokensOutputPath: string | null;
+  jsonOutputPath: string | null;
   excludedCollections: Set<string>;
   sdConfigPath: string | null;
   sdTransforms: string[];
   sdOutputFormat: string;
+  cleanTokensOutput: boolean;
+  cleanJsonOutput: boolean;
 }
 
 export function parseInputs(): ActionInputs {
@@ -22,8 +24,16 @@ export function parseInputs(): ActionInputs {
   const figmaToken = core.getInput("figma-token", { required: true });
   const figmaFileId = core.getInput("figma-file-id", { required: true });
 
-  const tokensOutputPath = path.join(workspace, core.getInput("tokens-output-path") || "design-tokens/tokens");
-  const jsonOutputPath = path.join(workspace, core.getInput("json-output-path") || "design-tokens/json");
+  const tokensOutputRaw = core.getInput("tokens-output-path").trim();
+  const tokensOutputPath = tokensOutputRaw ? path.join(workspace, tokensOutputRaw) : null;
+
+  const jsonOutputRaw = core.getInput("json-output-path").trim();
+  const jsonOutputPath = jsonOutputRaw ? path.join(workspace, jsonOutputRaw) : null;
+
+  if (!tokensOutputPath && !jsonOutputPath) {
+    core.setFailed("At least one of tokens-output-path or json-output-path must be provided.");
+    process.exit(1);
+  }
 
   const excludedCollectionsRaw = core.getInput("excluded-collections");
   const excludedCollections = new Set(
@@ -43,6 +53,9 @@ export function parseInputs(): ActionInputs {
 
   const sdOutputFormat = core.getInput("sd-output-format") || "json/nested";
 
+  const cleanTokensOutput = core.getInput("clean-tokens-output").trim().toLowerCase() === "true";
+  const cleanJsonOutput = core.getInput("clean-json-output").trim().toLowerCase() === "true";
+
   return {
     figmaToken,
     figmaFileId,
@@ -52,5 +65,7 @@ export function parseInputs(): ActionInputs {
     sdConfigPath,
     sdTransforms,
     sdOutputFormat,
+    cleanTokensOutput,
+    cleanJsonOutput,
   };
 }

@@ -1,3 +1,6 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import * as core from "@actions/core";
 
 import type { BrandTokenFiles } from "./types.ts";
@@ -28,17 +31,34 @@ async function main(): Promise<void> {
   core.info(`Styles: ${Object.keys(styleTokenFiles).join(", ")}`);
   Object.assign(tokenFiles, styleTokenFiles);
 
-  core.info(`Writing token files to ${inputs.tokensOutputPath}`);
-  writeTokenFiles(tokenFiles, inputs.tokensOutputPath);
+  let tempTokensDir: string | null = null;
+  try {
+    const tokensDir = inputs.tokensOutputPath
+      ?? (tempTokensDir = fs.mkdtempSync(path.join(os.tmpdir(), "figma-tokens-")));
 
-  core.info(`Running Style Dictionary → ${inputs.jsonOutputPath}`);
-  await runStyleDictionary({
-    tokensOutputPath: inputs.tokensOutputPath,
-    jsonOutputPath: inputs.jsonOutputPath,
-    sdConfigPath: inputs.sdConfigPath,
-    sdTransforms: inputs.sdTransforms,
-    sdOutputFormat: inputs.sdOutputFormat,
-  });
+    if (inputs.tokensOutputPath) {
+      core.info(`Writing token files to ${inputs.tokensOutputPath}`);
+    } else {
+      core.info("Skipping W3C token export (no tokens-output-path provided)");
+    }
+    writeTokenFiles(tokenFiles, tokensDir, inputs.tokensOutputPath ? inputs.cleanTokensOutput : false);
+
+    if (inputs.jsonOutputPath) {
+      core.info(`Running Style Dictionary → ${inputs.jsonOutputPath}`);
+      await runStyleDictionary({
+        tokensOutputPath: tokensDir,
+        jsonOutputPath: inputs.jsonOutputPath,
+        sdConfigPath: inputs.sdConfigPath,
+        sdTransforms: inputs.sdTransforms,
+        sdOutputFormat: inputs.sdOutputFormat,
+        clean: inputs.cleanJsonOutput,
+      });
+    } else {
+      core.info("Skipping Style Dictionary (no json-output-path provided)");
+    }
+  } finally {
+    if (tempTokensDir) fs.rmSync(tempTokensDir, { recursive: true, force: true });
+  }
 }
 
 main().catch((err) => {
