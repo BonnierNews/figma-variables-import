@@ -1,3 +1,7 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+
 import { getLocalVariables } from "./figma-api.ts";
 import { runStyleDictionary } from "./style-dictionary.ts";
 import { tokenFilesFromLocalVariables } from "./token-generation.ts";
@@ -7,10 +11,10 @@ import { writeTokenFiles } from "./write-tokens.ts";
 export interface SyncOptions {
   figmaToken: string;
   figmaFileId: string;
-  /** Absolute path where raw W3C token JSON files are written */
-  tokensOutputPath: string;
-  /** Absolute path where Style Dictionary output is written */
-  jsonOutputPath: string;
+  /** Absolute path where raw W3C token JSON files are written. Omit to skip writing them. */
+  tokensOutputPath?: string;
+  /** Absolute path where Style Dictionary output is written. Omit to skip running Style Dictionary. */
+  jsonOutputPath?: string;
   /** Collection names to skip entirely */
   excludedCollections?: Set<string> | string[];
   /** Whether to import Figma styles (FILL/TEXT/EFFECT) in addition to variables (default: true) */
@@ -21,6 +25,10 @@ export interface SyncOptions {
   sdTransforms?: string[];
   /** Style Dictionary output format (default: json/nested) */
   sdOutputFormat?: string;
+  /** Delete the tokens output directory before writing (default: false) */
+  cleanTokensOutput?: boolean;
+  /** Delete the JSON output directory before running Style Dictionary (default: false) */
+  cleanJsonOutput?: boolean;
 }
 
 export async function syncFigmaTokens(options: SyncOptions): Promise<void> {
@@ -34,7 +42,13 @@ export async function syncFigmaTokens(options: SyncOptions): Promise<void> {
     sdConfigPath = null,
     sdTransforms = [ "attribute/cti", "name/kebab", "size/rem" ],
     sdOutputFormat = "json/nested",
+    cleanTokensOutput = false,
+    cleanJsonOutput = false,
   } = options;
+
+  if (!tokensOutputPath && !jsonOutputPath) {
+    throw new Error("At least one of tokensOutputPath or jsonOutputPath must be provided.");
+  }
 
   const excludedSet = Array.isArray(excludedCollections)
     ? new Set(excludedCollections)
@@ -52,6 +66,24 @@ export async function syncFigmaTokens(options: SyncOptions): Promise<void> {
     Object.assign(tokenFiles, styleTokenFiles);
   }
 
-  writeTokenFiles(tokenFiles, tokensOutputPath);
-  await runStyleDictionary({ tokensOutputPath, jsonOutputPath, sdConfigPath, sdTransforms, sdOutputFormat });
+  let tempTokensDir: string | null = null;
+  try {
+    const tokensDir = tokensOutputPath
+      ?? (tempTokensDir = fs.mkdtempSync(path.join(os.tmpdir(), "figma-tokens-")));
+
+    writeTokenFiles(tokenFiles, tokensDir, tokensOutputPath ? cleanTokensOutput : false);
+
+    if (jsonOutputPath) {
+      await runStyleDictionary({
+        tokensOutputPath: tokensDir,
+        jsonOutputPath,
+        sdConfigPath,
+        sdTransforms,
+        sdOutputFormat,
+        clean: cleanJsonOutput,
+      });
+    }
+  } finally {
+    if (tempTokensDir) fs.rmSync(tempTokensDir, { recursive: true, force: true });
+  }
 }

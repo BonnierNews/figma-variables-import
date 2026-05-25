@@ -32,7 +32,9 @@ await syncFigmaTokens({
 });
 ```
 
-`tokensOutputPath` and `jsonOutputPath` must be absolute paths. The function writes the files and returns — committing is left to the caller.
+`tokensOutputPath` and `jsonOutputPath` must be absolute paths when provided. The function writes the files and returns — committing is left to the caller.
+
+Both output paths are optional, but at least one must be provided. Omitting `tokensOutputPath` skips writing W3C token files; omitting `jsonOutputPath` skips running Style Dictionary. When only `jsonOutputPath` is provided, W3C files are written to a temp directory so Style Dictionary can run, then removed.
 
 ### Options
 
@@ -40,12 +42,16 @@ await syncFigmaTokens({
 |---|---|---|---|
 | `figmaToken` | yes | — | Figma personal access token |
 | `figmaFileId` | yes | — | The Figma file ID to fetch variables from |
-| `tokensOutputPath` | yes | — | Absolute path where raw W3C token JSON files are written |
-| `jsonOutputPath` | yes | — | Absolute path where Style Dictionary output is written |
+| `tokensOutputPath` | no* | — | Absolute path where raw W3C token JSON files are written. Omit to skip. |
+| `jsonOutputPath` | no* | — | Absolute path where Style Dictionary output is written. Omit to skip. |
 | `excludedCollections` | no | `[]` | Collection names to skip (array or Set) |
 | `sdConfigPath` | no | — | Absolute path to a Style Dictionary v5 config file. Takes full precedence over `sdTransforms`/`sdOutputFormat` |
 | `sdTransforms` | no | `["attribute/cti", "name/kebab", "size/rem"]` | SD transforms to apply |
 | `sdOutputFormat` | no | `"json/nested"` | SD output format |
+| `cleanTokensOutput` | no | `false` | Delete `tokensOutputPath` before writing. |
+| `cleanJsonOutput` | no | `false` | Delete `jsonOutputPath` before running Style Dictionary. |
+
+\* At least one of `tokensOutputPath` or `jsonOutputPath` must be provided.
 
 ---
 
@@ -64,12 +70,16 @@ The calling workflow must:
 |---|---|---|---|
 | `figma-token` | yes | — | Figma personal access token |
 | `figma-file-id` | yes | — | The Figma file ID to fetch variables from |
-| `tokens-output-path` | no | `design-tokens/tokens` | Path where raw W3C token JSON files are written, mirroring the Figma collection hierarchy |
-| `json-output-path` | no | `design-tokens/json` | Path where Style Dictionary output is written |
+| `tokens-output-path` | no* | — | Path where raw W3C token JSON files are written, mirroring the Figma collection hierarchy. Omit to skip. |
+| `json-output-path` | no* | — | Path where Style Dictionary output is written. Omit to skip. |
 | `excluded-collections` | no | `""` | Comma-separated list of Figma collection names to skip |
 | `style-dictionary-config` | no | `""` | Path to a Style Dictionary v5 config file (relative to repo root). Takes full precedence — `sd-transforms` and `sd-output-format` are ignored when set |
 | `sd-transforms` | no | `attribute/cti,name/kebab,size/rem` | Comma-separated SD transform names. Used only when `style-dictionary-config` is not provided |
 | `sd-output-format` | no | `json/nested` | Style Dictionary output format. Used only when `style-dictionary-config` is not provided |
+| `clean-tokens-output` | no | `false` | When `true`, delete `tokens-output-path` before writing |
+| `clean-json-output` | no | `false` | When `true`, delete `json-output-path` before running Style Dictionary |
+
+\* At least one of `tokens-output-path` or `json-output-path` must be provided. Omitting `tokens-output-path` skips writing W3C token files; omitting `json-output-path` skips running Style Dictionary.
 
 ### Usage
 

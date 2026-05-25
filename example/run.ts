@@ -14,7 +14,6 @@ await syncFigmaTokens({
   figmaToken: FIGMA_TOKEN,
   figmaFileId: FIGMA_FILE_ID,
   tokensOutputPath: path.join(dir, "output/tokens"),
-  jsonOutputPath: path.join(dir, "output/json"),
   excludedCollections: [ "sizing_appearence", "static-variables", "theme-appearence" ],
 });
 

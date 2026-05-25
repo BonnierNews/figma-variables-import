@@ -13,12 +13,17 @@ inputs:
     description: >
       Path in the calling repo where raw W3C token JSON files are written.
       This mirrors the Figma collection hierarchy as directories.
+      Omit to skip writing W3C token files. At least one of tokens-output-path
+      or json-output-path must be provided.
     required: false
-    default: design-tokens/tokens
+    default: ""
   json-output-path:
-    description: Path in the calling repo where Style Dictionary output is written
+    description: >
+      Path in the calling repo where Style Dictionary output is written.
+      Omit to skip running Style Dictionary. At least one of tokens-output-path
+      or json-output-path must be provided.
     required: false
-    default: design-tokens/json
+    default: ""
   excluded-collections:
     description: >
       Comma-separated list of Figma collection names to skip entirely.
@@ -46,6 +51,18 @@ inputs:
       Example: "css/variables" or "json/nested"
     required: false
     default: "json/nested"
+  clean-tokens-output:
+    description: >
+      When "true", delete tokens-output-path before writing.
+      When "false" (default), files are written on top of any existing content.
+    required: false
+    default: "false"
+  clean-json-output:
+    description: >
+      When "true", delete json-output-path before running Style Dictionary.
+      When "false" (default), Style Dictionary writes on top of any existing content.
+    required: false
+    default: "false"
 
 runs:
   using: node20
