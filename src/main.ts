@@ -34,7 +34,7 @@ async function main(): Promise<void> {
   let tempTokensDir: string | null = null;
   try {
     const tokensDir = inputs.tokensOutputPath
-      ?? (tempTokensDir = fs.mkdtempSync(path.join(os.tmpdir(), "figma-tokens-")));
+      ?? (tempTokensDir = fs.mkdtempSync(path.join(os.tmpdir(), "figma-variables-")));
 
     if (inputs.tokensOutputPath) {
       core.info(`Writing token files to ${inputs.tokensOutputPath}`);
