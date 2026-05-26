@@ -1,15 +1,15 @@
-# figma-tokens-import
+# figma-variables-import
 
 Fetches variables from a Figma file, writes raw [W3C design token](https://design-tokens.github.io/community-group/format/) JSON files, and runs [Style Dictionary v5](https://styledictionary.com/). The generated files are written to disk — committing them is left to the caller.
 
-Available as both a **GitHub Action** and an **npm package** (`@bonniernews/figma-tokens-import`).
+Available as both a **GitHub Action** and an **npm package** (`@bonniernews/figma-variables-import`).
 
 ## npm package
 
 Install from the GitHub npm registry:
 
 ```bash
-npm install @bonniernews/figma-tokens-import
+npm install @bonniernews/figma-variables-import
 ```
 
 Add the registry to your `.npmrc`:
@@ -21,9 +21,9 @@ Add the registry to your `.npmrc`:
 ### Usage
 
 ```ts
-import { syncFigmaTokens } from "@bonniernews/figma-tokens-import";
+import { syncFigmaVariables } from "@bonniernews/figma-variables-import";
 
-await syncFigmaTokens({
+await syncFigmaVariables({
   figmaToken: process.env.FIGMA_TOKEN,
   figmaFileId: "your-file-id",
   tokensOutputPath: "/path/to/repo/design-tokens/tokens",
@@ -82,7 +82,7 @@ The calling workflow must:
 #### Minimal (default Style Dictionary config)
 
 ```yaml
-name: Sync Figma Tokens
+name: Sync Figma Variables
 on:
   schedule:
     - cron: '0 6 * * 1'
@@ -92,7 +92,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: figma-tokens-${{ github.ref }}
+  group: figma-variables-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -101,7 +101,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: bonniernews/figma-tokens-import@v1
+      - uses: bonniernews/figma-variables-import@v1
         with:
           figma-token: ${{ secrets.FIGMA_TOKEN }}
           figma-file-id: ${{ vars.FIGMA_FILE_ID }}
@@ -113,7 +113,7 @@ jobs:
 #### With a custom Style Dictionary config
 
 ```yaml
-      - uses: bonniernews/figma-tokens-import@v1
+      - uses: bonniernews/figma-variables-import@v1
         with:
           figma-token: ${{ secrets.FIGMA_TOKEN }}
           figma-file-id: ${{ vars.FIGMA_FILE_ID }}
@@ -126,7 +126,7 @@ If the SD config uses custom transforms or formats installed as npm packages, ad
 
 ```yaml
       - run: npm ci
-      - uses: bonniernews/figma-tokens-import@v1
+      - uses: bonniernews/figma-variables-import@v1
         with:
           ...
 ```

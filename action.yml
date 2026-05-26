@@ -1,4 +1,4 @@
-name: Figma Tokens
+name: Figma Variables
 description: Fetch Figma variables, generate W3C token files, run Style Dictionary, commit results
 author: Bonnier News
 

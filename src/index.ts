@@ -27,7 +27,7 @@ export interface SyncOptions {
   sdOutputFormat?: string;
 }
 
-export async function syncFigmaTokens(options: SyncOptions): Promise<void> {
+export async function syncFigmaVariables(options: SyncOptions): Promise<void> {
   const {
     figmaToken,
     figmaFileId,
@@ -63,7 +63,7 @@ export async function syncFigmaTokens(options: SyncOptions): Promise<void> {
   let tempTokensDir: string | null = null;
   try {
     const tokensDir = tokensOutputPath
-      ?? (tempTokensDir = fs.mkdtempSync(path.join(os.tmpdir(), "figma-tokens-")));
+      ?? (tempTokensDir = fs.mkdtempSync(path.join(os.tmpdir(), "figma-variables-")));
 
     writeTokenFiles(tokenFiles, tokensDir);
 
