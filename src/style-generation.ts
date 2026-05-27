@@ -59,7 +59,7 @@ interface EffectDoc {
     offset?: { x: number; y: number };
     radius?: number;
     spread?: number;
-    boundVariables?: Record<string, VariableAlias>;
+    boundVariables?: { color?: VariableAlias };
   }>;
 }
 
@@ -146,15 +146,14 @@ function valueFromFillStyle(
   doc: FillDoc,
   context: ModeContext | null,
   variables: Record<string, LocalVariable>
-): { type: string; value: TokenValue } {
+): { type: string; value: TokenValue } | null {
   const fill = doc.fills?.[0];
-  if (!fill) return { type: "color", value: "#000000" };
+  if (!fill) return null;
 
   if (fill.type === "SOLID") {
-    return {
-      type: "color",
-      value: colorForContext(fill.boundVariables?.color, rgbToHex(fill.color as RGBA), context, variables),
-    };
+    const color = colorForContext(fill.boundVariables?.color, fill.color && rgbToHex(fill.color), context, variables);
+    if (!color) return null;
+    return { type: "color", value: color };
   }
 
   const stops = (fill.gradientStops ?? []).map((stop) => ({
@@ -215,10 +214,10 @@ function valueFromTextStyleForContext(
 // there is no context (single-file mode) or no binding.
 function colorForContext(
   binding: VariableAlias | undefined,
-  rawHex: string,
+  rawHex: string | undefined,
   context: ModeContext | null,
   variables: Record<string, LocalVariable>
-): string {
+): string | undefined {
   if (!context || !binding) return rawHex;
 
   const variable = variables[binding.id];
@@ -247,12 +246,13 @@ function valueFromEffectStyle(
         return { radius: effect.radius };
       }
 
+      const color = colorForContext(effect.boundVariables?.color, effect.color && rgbToHex(effect.color), context, variables);
       return {
         offsetX: effect.offset?.x ?? 0,
         offsetY: effect.offset?.y ?? 0,
         blur: effect.radius,
         spread: effect.spread ?? 0,
-        color: colorForContext(effect.boundVariables?.color, rgbToHex(effect.color as RGBA), context, variables),
+        ...(color ? { color } : {}),
         ...(effect.type === "INNER_SHADOW" ? { inset: true } : {}),
       };
     });
@@ -358,7 +358,9 @@ export async function tokenFilesFromStyles(
         for (const nodeEntry of Object.values(nodesResponse.nodes)) {
           const doc = nodeEntry.document as unknown as StyleDoc;
           const { name, description } = doc;
-          const { type, value } = valueFromFillStyle(doc, context, variables);
+          const fillValue = valueFromFillStyle(doc, context, variables);
+          if (!fillValue) continue;
+          const { type, value } = fillValue;
           const token: Token = { $type: type, $value: value };
           if (description) token.$description = description;
           setNestedToken(target, name, token);
