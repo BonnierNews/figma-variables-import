@@ -5,6 +5,8 @@
   "engines": {
     "node": ">=22.0.0"
   },
+  "main": "./dist/lib/index.js",
+  "types": "./dist/lib/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/lib/index.d.ts",
@@ -17,6 +19,7 @@
     "dist/index.js",
     "action.yml"
   ],
+
   "publishConfig": {
     "registry": "https://npm.pkg.github.com"
   },
