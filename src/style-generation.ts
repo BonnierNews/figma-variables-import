@@ -7,6 +7,7 @@ import { rgbToHex } from "./utils.ts";
 
 const STYLES_BRAND_KEY = "styles";
 const TYPOGRAPHY_BRAND_KEY = "styles/typography";
+const EFFECT_BRAND_KEY = "styles/effect";
 
 type VariableAlias = { type: string; id: string };
 type ExtCollection = LocalVariableCollection & FigmaCollectionExtras;
@@ -56,6 +57,7 @@ interface EffectDoc {
     offset?: { x: number; y: number };
     radius?: number;
     spread?: number;
+    boundVariables?: Record<string, VariableAlias>;
   }>;
 }
 
@@ -192,7 +194,42 @@ function valueFromTextStyleForContext(
   return value;
 }
 
-function valueFromEffectStyle(doc: EffectDoc): Record<string, unknown>[] {
+// Resolve a shadow's color for a given mode. The color is the only effect
+// property driven by variables; it is bound to a variable in a collection with
+// light/dark (etc.) modes. Geometry is taken as-is from the resolved style.
+// Falls back to the raw style color when there is no binding or no matching mode.
+function effectColorForMode(
+  effect: NonNullable<EffectDoc["effects"]>[number],
+  modeName: string | null,
+  variables: Record<string, LocalVariable>,
+  variableCollections: Record<string, LocalVariableCollection>
+): TokenValue {
+  const raw = rgbToHex(effect.color as RGBA);
+
+  const binding = effect.boundVariables?.color;
+  if (!modeName || !binding) return raw;
+
+  const variable = variables[binding.id];
+  if (!variable) return raw;
+
+  const collection = variableCollections[variable.variableCollectionId];
+  const mode = collection?.modes.find((m) => m.name.toLowerCase() === modeName.toLowerCase())
+    ?? collection?.modes[0];
+  if (!mode) return raw;
+
+  const resolved = tokenValueFromVariable(variable, mode.modeId, variables);
+  return typeof resolved === "string" ? resolved : raw;
+}
+
+// Build the W3C shadow/blur value array for an effect style. modeName selects
+// which mode of the color variable's collection to resolve colors against;
+// pass null to use the raw resolved colors (no mode dimension).
+function valueFromEffectStyle(
+  doc: EffectDoc,
+  modeName: string | null,
+  variables: Record<string, LocalVariable>,
+  variableCollections: Record<string, LocalVariableCollection>
+): Record<string, unknown>[] {
   const effects = doc.effects ?? [];
 
   return effects
@@ -207,7 +244,7 @@ function valueFromEffectStyle(doc: EffectDoc): Record<string, unknown>[] {
         offsetY: effect.offset?.y ?? 0,
         blur: effect.radius,
         spread: effect.spread ?? 0,
-        color: rgbToHex(effect.color as RGBA),
+        color: effectColorForMode(effect, modeName, variables, variableCollections),
         ...(effect.type === "INNER_SHADOW" ? { inset: true } : {}),
       };
     });
@@ -300,19 +337,49 @@ export async function tokenFilesFromStyles(
         setNestedToken(result[STYLES_BRAND_KEY]["color.json"], name, token);
       }
     } else if (styleType === "EFFECT") {
-      if (!result[STYLES_BRAND_KEY]) result[STYLES_BRAND_KEY] = {};
-      result[STYLES_BRAND_KEY]["effect.json"] = {};
-
+      // Effect styles bind their color to a variable; that variable's collection
+      // (e.g. "Effects" with light/dark modes) defines the per-mode output.
+      let colorCollection: LocalVariableCollection | null = null;
       for (const nodeEntry of Object.values(nodesResponse.nodes)) {
-        const doc = nodeEntry.document as unknown as StyleDoc;
-        const { name, description } = doc;
-        const values = valueFromEffectStyle(doc);
-        if (!values.length) continue;
-        const firstEffectType = doc.effects?.[0]?.type ?? "";
-        const tokenType = firstEffectType === "LAYER_BLUR" || firstEffectType === "BACKGROUND_BLUR" ? "blur" : "shadow";
-        const token: Token = { $type: tokenType, $value: values };
-        if (description) token.$description = description;
-        setNestedToken(result[STYLES_BRAND_KEY]["effect.json"], name, token);
+        const doc = nodeEntry.document as unknown as EffectDoc;
+        for (const effect of doc.effects ?? []) {
+          const binding = effect.boundVariables?.color;
+          const variable = binding ? variables[binding.id] : undefined;
+          if (variable) {
+            colorCollection = variableCollections[variable.variableCollectionId] ?? null;
+            break;
+          }
+        }
+        if (colorCollection) break;
+      }
+
+      const writeEffectTokens = (target: TokensFile, modeName: string | null): void => {
+        for (const nodeEntry of Object.values(nodesResponse.nodes)) {
+          const doc = nodeEntry.document as unknown as StyleDoc;
+          const { name, description } = doc;
+          const values = valueFromEffectStyle(doc, modeName, variables, variableCollections);
+          if (!values.length) continue;
+          const firstEffectType = doc.effects?.[0]?.type ?? "";
+          const tokenType = firstEffectType === "LAYER_BLUR" || firstEffectType === "BACKGROUND_BLUR" ? "blur" : "shadow";
+          const token: Token = { $type: tokenType, $value: values };
+          if (description) token.$description = description;
+          setNestedToken(target, name, token);
+        }
+      };
+
+      if (colorCollection && colorCollection.modes.length > 0) {
+        // Color-bound effects: one file per color-collection mode, e.g. styles/effect/lightMode.json
+        for (const mode of colorCollection.modes) {
+          const fileName = modeFileName(mode.name);
+          if (!result[EFFECT_BRAND_KEY]) result[EFFECT_BRAND_KEY] = {};
+          if (!result[EFFECT_BRAND_KEY][fileName]) result[EFFECT_BRAND_KEY][fileName] = {};
+          writeEffectTokens(result[EFFECT_BRAND_KEY][fileName], mode.name);
+        }
+      } else {
+        // No color binding: single resolved file (backward compatible)
+        if (!result[STYLES_BRAND_KEY]) result[STYLES_BRAND_KEY] = {};
+        result[STYLES_BRAND_KEY]["effect.json"] = {};
+        writeEffectTokens(result[STYLES_BRAND_KEY]["effect.json"], null);
       }
     }
   }
