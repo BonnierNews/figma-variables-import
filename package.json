@@ -19,7 +19,6 @@
     "dist/index.js",
     "action.yml"
   ],
-
   "publishConfig": {
     "registry": "https://npm.pkg.github.com"
   },
