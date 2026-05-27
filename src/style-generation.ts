@@ -8,6 +8,7 @@ import { rgbToHex } from "./utils.ts";
 const STYLES_BRAND_KEY = "styles";
 const TYPOGRAPHY_BRAND_KEY = "styles/typography";
 const EFFECT_BRAND_KEY = "styles/effect";
+const COLOR_BRAND_KEY = "styles/color";
 
 type VariableAlias = { type: string; id: string };
 type ExtCollection = LocalVariableCollection & FigmaCollectionExtras;
@@ -29,8 +30,9 @@ interface FillDoc {
   fills?: Array<{
     type: string;
     color?: RGBA;
-    gradientStops?: Array<{ color: RGBA; position: number }>;
+    gradientStops?: Array<{ color: RGBA; position: number; boundVariables?: { color?: VariableAlias } }>;
     gradientHandlePositions?: Array<{ x: number; y: number }>;
+    boundVariables?: { color?: VariableAlias };
   }>;
 }
 
@@ -137,16 +139,26 @@ function findTypographyBaseCollection(
   return withExtensions.length === 1 ? withExtensions[0].id : null;
 }
 
-function valueFromFillStyle(doc: FillDoc): { type: string; value: TokenValue } {
+// Build the W3C color/gradient value for a fill style. context selects which
+// (collection × mode) to resolve bound colors against; pass null to use the raw
+// resolved colors (no mode dimension).
+function valueFromFillStyle(
+  doc: FillDoc,
+  context: ModeContext | null,
+  variables: Record<string, LocalVariable>
+): { type: string; value: TokenValue } {
   const fill = doc.fills?.[0];
   if (!fill) return { type: "color", value: "#000000" };
 
   if (fill.type === "SOLID") {
-    return { type: "color", value: rgbToHex(fill.color as RGBA) };
+    return {
+      type: "color",
+      value: colorForContext(fill.boundVariables?.color, rgbToHex(fill.color as RGBA), context, variables),
+    };
   }
 
   const stops = (fill.gradientStops ?? []).map((stop) => ({
-    color: rgbToHex(stop.color),
+    color: colorForContext(stop.boundVariables?.color, rgbToHex(stop.color), context, variables),
     position: stop.position,
   }));
 
@@ -197,33 +209,30 @@ function valueFromTextStyleForContext(
   return value;
 }
 
-// Resolve a shadow's color for a given mode context. The color is the only
-// effect property driven by variables; it is bound to a variable in a collection
-// with light/dark (etc.) modes and optional brand extensions. Geometry is taken
-// as-is from the resolved style. Falls back to the raw style color when there is
-// no context (single-file mode) or no binding.
-function effectColorForContext(
-  effect: NonNullable<EffectDoc["effects"]>[number],
+// Resolve a color (solid fill, gradient stop, or shadow) for a given mode
+// context. The color may be bound to a variable in a collection with light/dark
+// (etc.) modes and optional brand extensions. Falls back to the raw hex when
+// there is no context (single-file mode) or no binding.
+function colorForContext(
+  binding: VariableAlias | undefined,
+  rawHex: string,
   context: ModeContext | null,
   variables: Record<string, LocalVariable>
-): TokenValue {
-  const raw = rgbToHex(effect.color as RGBA);
-
-  const binding = effect.boundVariables?.color;
-  if (!context || !binding) return raw;
+): string {
+  if (!context || !binding) return rawHex;
 
   const variable = variables[binding.id];
-  if (!variable) return raw;
+  if (!variable) return rawHex;
 
   const resolved = context.collection
     ? getVariableValueForMode(variable, context.modeId, context.collection, variables)
     : tokenValueFromVariable(variable, context.modeId, variables);
-  return typeof resolved === "string" ? resolved : raw;
+  return typeof resolved === "string" ? resolved : rawHex;
 }
 
 // Build the W3C shadow/blur value array for an effect style. context selects
 // which (collection × mode) to resolve colors against; pass null to use the raw
-// resolved colors (no mode dimension).
+// resolved colors (no mode dimension). Geometry is taken as-is from the style.
 function valueFromEffectStyle(
   doc: EffectDoc,
   context: ModeContext | null,
@@ -243,7 +252,7 @@ function valueFromEffectStyle(
         offsetY: effect.offset?.y ?? 0,
         blur: effect.radius,
         spread: effect.spread ?? 0,
-        color: effectColorForContext(effect, context, variables),
+        color: colorForContext(effect.boundVariables?.color, rgbToHex(effect.color as RGBA), context, variables),
         ...(effect.type === "INNER_SHADOW" ? { inset: true } : {}),
       };
     });
@@ -324,16 +333,54 @@ export async function tokenFilesFromStyles(
         }
       }
     } else if (styleType === "FILL") {
-      if (!result[STYLES_BRAND_KEY]) result[STYLES_BRAND_KEY] = {};
-      result[STYLES_BRAND_KEY]["color.json"] = {};
-
+      // Fill styles bind their color (solid paint or gradient stops) to a
+      // variable; that variable's collection (e.g. "Colors" with light/dark
+      // modes) and its brand extensions define the per-mode/brand output — the
+      // same walk used for typography and effects.
+      let colorCollectionId: string | null = null;
       for (const nodeEntry of Object.values(nodesResponse.nodes)) {
-        const doc = nodeEntry.document as unknown as StyleDoc;
-        const { name, description } = doc;
-        const { type, value } = valueFromFillStyle(doc);
-        const token: Token = { $type: type, $value: value };
-        if (description) token.$description = description;
-        setNestedToken(result[STYLES_BRAND_KEY]["color.json"], name, token);
+        const doc = nodeEntry.document as unknown as FillDoc;
+        for (const fill of doc.fills ?? []) {
+          const bindings = [ fill.boundVariables?.color, ...(fill.gradientStops ?? []).map((s) => s.boundVariables?.color) ];
+          for (const binding of bindings) {
+            const variable = binding ? variables[binding.id] : undefined;
+            if (variable) {
+              colorCollectionId = variable.variableCollectionId;
+              break;
+            }
+          }
+          if (colorCollectionId) break;
+        }
+        if (colorCollectionId) break;
+      }
+
+      const writeColorTokens = (target: TokensFile, context: ModeContext | null): void => {
+        for (const nodeEntry of Object.values(nodesResponse.nodes)) {
+          const doc = nodeEntry.document as unknown as StyleDoc;
+          const { name, description } = doc;
+          const { type, value } = valueFromFillStyle(doc, context, variables);
+          const token: Token = { $type: type, $value: value };
+          if (description) token.$description = description;
+          setNestedToken(target, name, token);
+        }
+      };
+
+      const contexts = colorCollectionId
+        ? buildModeContexts(colorCollectionId, variableCollections, COLOR_BRAND_KEY)
+        : [];
+
+      if (contexts.length) {
+        // Color-bound fills: one file per (collection × mode), e.g. styles/color/light.json, styles/color/App/light.json
+        for (const context of contexts) {
+          if (!result[context.brandKey]) result[context.brandKey] = {};
+          if (!result[context.brandKey][context.fileName]) result[context.brandKey][context.fileName] = {};
+          writeColorTokens(result[context.brandKey][context.fileName], context);
+        }
+      } else {
+        // No color binding: single resolved file (backward compatible)
+        if (!result[STYLES_BRAND_KEY]) result[STYLES_BRAND_KEY] = {};
+        result[STYLES_BRAND_KEY]["color.json"] = {};
+        writeColorTokens(result[STYLES_BRAND_KEY]["color.json"], null);
       }
     } else if (styleType === "EFFECT") {
       // Effect styles bind their color to a variable; that variable's collection
