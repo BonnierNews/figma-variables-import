@@ -12,7 +12,7 @@ const EFFECT_BRAND_KEY = "styles/effect";
 type VariableAlias = { type: string; id: string };
 type ExtCollection = LocalVariableCollection & FigmaCollectionExtras;
 
-interface TypographyContext {
+interface ModeContext {
   collection: ExtCollection | null;
   modeId: string;
   brandKey: string;
@@ -80,19 +80,22 @@ function allBoundVariables(doc: TextDoc): Record<string, VariableAlias | Variabl
 }
 
 // Walk the collection hierarchy starting from baseCollectionId, depth-first.
-// Produces one TypographyContext per (collection × mode), with correct brandKey paths.
-function buildTypographyContexts(
+// Produces one ModeContext per (collection × mode), with brandKey paths rooted
+// at baseBrandKey (e.g. "styles/typography" or "styles/effect"), so base modes
+// and brand-extension modes each get their own file.
+function buildModeContexts(
   baseCollectionId: string,
-  variableCollections: Record<string, LocalVariableCollection>
-): TypographyContext[] {
+  variableCollections: Record<string, LocalVariableCollection>,
+  baseBrandKey: string
+): ModeContext[] {
   const allCollections = variableCollections as Record<string, ExtCollection>;
-  const contexts: TypographyContext[] = [];
+  const contexts: ModeContext[] = [];
 
   function walk(collId: string, brandKey: string): void {
     const collection = allCollections[collId];
     if (!collection) return;
 
-    const isBase = brandKey === TYPOGRAPHY_BRAND_KEY;
+    const isBase = brandKey === baseBrandKey;
     for (const mode of collection.modes) {
       contexts.push({
         collection: isBase ? null : collection,
@@ -109,7 +112,7 @@ function buildTypographyContexts(
     }
   }
 
-  walk(baseCollectionId, TYPOGRAPHY_BRAND_KEY);
+  walk(baseCollectionId, baseBrandKey);
   return contexts;
 }
 
@@ -161,7 +164,7 @@ function valueFromFillStyle(doc: FillDoc): { type: string; value: TokenValue } {
 
 function valueFromTextStyleForContext(
   doc: TextDoc,
-  context: TypographyContext,
+  context: ModeContext,
   variables: Record<string, LocalVariable>
 ): TokenValue {
   const style = doc.style;
@@ -194,41 +197,37 @@ function valueFromTextStyleForContext(
   return value;
 }
 
-// Resolve a shadow's color for a given mode. The color is the only effect
-// property driven by variables; it is bound to a variable in a collection with
-// light/dark (etc.) modes. Geometry is taken as-is from the resolved style.
-// Falls back to the raw style color when there is no binding or no matching mode.
-function effectColorForMode(
+// Resolve a shadow's color for a given mode context. The color is the only
+// effect property driven by variables; it is bound to a variable in a collection
+// with light/dark (etc.) modes and optional brand extensions. Geometry is taken
+// as-is from the resolved style. Falls back to the raw style color when there is
+// no context (single-file mode) or no binding.
+function effectColorForContext(
   effect: NonNullable<EffectDoc["effects"]>[number],
-  modeName: string | null,
-  variables: Record<string, LocalVariable>,
-  variableCollections: Record<string, LocalVariableCollection>
+  context: ModeContext | null,
+  variables: Record<string, LocalVariable>
 ): TokenValue {
   const raw = rgbToHex(effect.color as RGBA);
 
   const binding = effect.boundVariables?.color;
-  if (!modeName || !binding) return raw;
+  if (!context || !binding) return raw;
 
   const variable = variables[binding.id];
   if (!variable) return raw;
 
-  const collection = variableCollections[variable.variableCollectionId];
-  const mode = collection?.modes.find((m) => m.name.toLowerCase() === modeName.toLowerCase())
-    ?? collection?.modes[0];
-  if (!mode) return raw;
-
-  const resolved = tokenValueFromVariable(variable, mode.modeId, variables);
+  const resolved = context.collection
+    ? getVariableValueForMode(variable, context.modeId, context.collection, variables)
+    : tokenValueFromVariable(variable, context.modeId, variables);
   return typeof resolved === "string" ? resolved : raw;
 }
 
-// Build the W3C shadow/blur value array for an effect style. modeName selects
-// which mode of the color variable's collection to resolve colors against;
-// pass null to use the raw resolved colors (no mode dimension).
+// Build the W3C shadow/blur value array for an effect style. context selects
+// which (collection × mode) to resolve colors against; pass null to use the raw
+// resolved colors (no mode dimension).
 function valueFromEffectStyle(
   doc: EffectDoc,
-  modeName: string | null,
-  variables: Record<string, LocalVariable>,
-  variableCollections: Record<string, LocalVariableCollection>
+  context: ModeContext | null,
+  variables: Record<string, LocalVariable>
 ): Record<string, unknown>[] {
   const effects = doc.effects ?? [];
 
@@ -244,7 +243,7 @@ function valueFromEffectStyle(
         offsetY: effect.offset?.y ?? 0,
         blur: effect.radius,
         spread: effect.spread ?? 0,
-        color: effectColorForMode(effect, modeName, variables, variableCollections),
+        color: effectColorForContext(effect, context, variables),
         ...(effect.type === "INNER_SHADOW" ? { inset: true } : {}),
       };
     });
@@ -308,7 +307,7 @@ export async function tokenFilesFromStyles(
       }
 
       const contexts = baseCollectionId
-        ? buildTypographyContexts(baseCollectionId, variableCollections)
+        ? buildModeContexts(baseCollectionId, variableCollections, TYPOGRAPHY_BRAND_KEY)
         : [];
 
       for (const context of contexts) {
@@ -338,26 +337,27 @@ export async function tokenFilesFromStyles(
       }
     } else if (styleType === "EFFECT") {
       // Effect styles bind their color to a variable; that variable's collection
-      // (e.g. "Effects" with light/dark modes) defines the per-mode output.
-      let colorCollection: LocalVariableCollection | null = null;
+      // (e.g. "Effects" with light/dark modes) and its brand extensions define
+      // the per-mode/brand output — the same walk used for typography.
+      let colorCollectionId: string | null = null;
       for (const nodeEntry of Object.values(nodesResponse.nodes)) {
         const doc = nodeEntry.document as unknown as EffectDoc;
         for (const effect of doc.effects ?? []) {
           const binding = effect.boundVariables?.color;
           const variable = binding ? variables[binding.id] : undefined;
           if (variable) {
-            colorCollection = variableCollections[variable.variableCollectionId] ?? null;
+            colorCollectionId = variable.variableCollectionId;
             break;
           }
         }
-        if (colorCollection) break;
+        if (colorCollectionId) break;
       }
 
-      const writeEffectTokens = (target: TokensFile, modeName: string | null): void => {
+      const writeEffectTokens = (target: TokensFile, context: ModeContext | null): void => {
         for (const nodeEntry of Object.values(nodesResponse.nodes)) {
           const doc = nodeEntry.document as unknown as StyleDoc;
           const { name, description } = doc;
-          const values = valueFromEffectStyle(doc, modeName, variables, variableCollections);
+          const values = valueFromEffectStyle(doc, context, variables);
           if (!values.length) continue;
           const firstEffectType = doc.effects?.[0]?.type ?? "";
           const tokenType = firstEffectType === "LAYER_BLUR" || firstEffectType === "BACKGROUND_BLUR" ? "blur" : "shadow";
@@ -367,13 +367,16 @@ export async function tokenFilesFromStyles(
         }
       };
 
-      if (colorCollection && colorCollection.modes.length > 0) {
-        // Color-bound effects: one file per color-collection mode, e.g. styles/effect/lightMode.json
-        for (const mode of colorCollection.modes) {
-          const fileName = modeFileName(mode.name);
-          if (!result[EFFECT_BRAND_KEY]) result[EFFECT_BRAND_KEY] = {};
-          if (!result[EFFECT_BRAND_KEY][fileName]) result[EFFECT_BRAND_KEY][fileName] = {};
-          writeEffectTokens(result[EFFECT_BRAND_KEY][fileName], mode.name);
+      const contexts = colorCollectionId
+        ? buildModeContexts(colorCollectionId, variableCollections, EFFECT_BRAND_KEY)
+        : [];
+
+      if (contexts.length) {
+        // Color-bound effects: one file per (collection × mode), e.g. styles/effect/lightMode.json, styles/effect/App/lightMode.json
+        for (const context of contexts) {
+          if (!result[context.brandKey]) result[context.brandKey] = {};
+          if (!result[context.brandKey][context.fileName]) result[context.brandKey][context.fileName] = {};
+          writeEffectTokens(result[context.brandKey][context.fileName], context);
         }
       } else {
         // No color binding: single resolved file (backward compatible)
