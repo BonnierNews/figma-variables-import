@@ -7,11 +7,13 @@ import { rgbToHex } from "./utils.ts";
 
 const STYLES_BRAND_KEY = "styles";
 const TYPOGRAPHY_BRAND_KEY = "styles/typography";
+const EFFECT_BRAND_KEY = "styles/effect";
+const COLOR_BRAND_KEY = "styles/color";
 
 type VariableAlias = { type: string; id: string };
 type ExtCollection = LocalVariableCollection & FigmaCollectionExtras;
 
-interface TypographyContext {
+interface ModeContext {
   collection: ExtCollection | null;
   modeId: string;
   brandKey: string;
@@ -28,8 +30,9 @@ interface FillDoc {
   fills?: Array<{
     type: string;
     color?: RGBA;
-    gradientStops?: Array<{ color: RGBA; position: number }>;
+    gradientStops?: Array<{ color: RGBA; position: number; boundVariables?: { color?: VariableAlias } }>;
     gradientHandlePositions?: Array<{ x: number; y: number }>;
+    boundVariables?: { color?: VariableAlias };
   }>;
 }
 
@@ -56,6 +59,7 @@ interface EffectDoc {
     offset?: { x: number; y: number };
     radius?: number;
     spread?: number;
+    boundVariables?: { color?: VariableAlias };
   }>;
 }
 
@@ -78,19 +82,22 @@ function allBoundVariables(doc: TextDoc): Record<string, VariableAlias | Variabl
 }
 
 // Walk the collection hierarchy starting from baseCollectionId, depth-first.
-// Produces one TypographyContext per (collection × mode), with correct brandKey paths.
-function buildTypographyContexts(
+// Produces one ModeContext per (collection × mode), with brandKey paths rooted
+// at baseBrandKey (e.g. "styles/typography" or "styles/effect"), so base modes
+// and brand-extension modes each get their own file.
+function buildModeContexts(
   baseCollectionId: string,
-  variableCollections: Record<string, LocalVariableCollection>
-): TypographyContext[] {
+  variableCollections: Record<string, LocalVariableCollection>,
+  baseBrandKey: string
+): ModeContext[] {
   const allCollections = variableCollections as Record<string, ExtCollection>;
-  const contexts: TypographyContext[] = [];
+  const contexts: ModeContext[] = [];
 
   function walk(collId: string, brandKey: string): void {
     const collection = allCollections[collId];
     if (!collection) return;
 
-    const isBase = brandKey === TYPOGRAPHY_BRAND_KEY;
+    const isBase = brandKey === baseBrandKey;
     for (const mode of collection.modes) {
       contexts.push({
         collection: isBase ? null : collection,
@@ -107,7 +114,7 @@ function buildTypographyContexts(
     }
   }
 
-  walk(baseCollectionId, TYPOGRAPHY_BRAND_KEY);
+  walk(baseCollectionId, baseBrandKey);
   return contexts;
 }
 
@@ -132,16 +139,25 @@ function findTypographyBaseCollection(
   return withExtensions.length === 1 ? withExtensions[0].id : null;
 }
 
-function valueFromFillStyle(doc: FillDoc): { type: string; value: TokenValue } {
+// Build the W3C color/gradient value for a fill style. context selects which
+// (collection × mode) to resolve bound colors against; pass null to use the raw
+// resolved colors (no mode dimension).
+function valueFromFillStyle(
+  doc: FillDoc,
+  context: ModeContext | null,
+  variables: Record<string, LocalVariable>
+): { type: string; value: TokenValue } | null {
   const fill = doc.fills?.[0];
-  if (!fill) return { type: "color", value: "#000000" };
+  if (!fill) return null;
 
   if (fill.type === "SOLID") {
-    return { type: "color", value: rgbToHex(fill.color as RGBA) };
+    const color = colorForContext(fill.boundVariables?.color, fill.color && rgbToHex(fill.color), context, variables);
+    if (!color) return null;
+    return { type: "color", value: color };
   }
 
   const stops = (fill.gradientStops ?? []).map((stop) => ({
-    color: rgbToHex(stop.color),
+    color: colorForContext(stop.boundVariables?.color, rgbToHex(stop.color), context, variables),
     position: stop.position,
   }));
 
@@ -159,7 +175,7 @@ function valueFromFillStyle(doc: FillDoc): { type: string; value: TokenValue } {
 
 function valueFromTextStyleForContext(
   doc: TextDoc,
-  context: TypographyContext,
+  context: ModeContext,
   variables: Record<string, LocalVariable>
 ): TokenValue {
   const style = doc.style;
@@ -192,22 +208,59 @@ function valueFromTextStyleForContext(
   return value;
 }
 
-function valueFromEffectStyle(doc: EffectDoc): Record<string, unknown>[] {
+// Resolve a color (solid fill, gradient stop, or shadow) for a given mode
+// context. The color may be bound to a variable in a collection with light/dark
+// (etc.) modes and optional brand extensions. Falls back to the raw hex when
+// there is no context (single-file mode) or no binding.
+function colorForContext(
+  binding: VariableAlias | undefined,
+  rawHex: string | undefined,
+  context: ModeContext | null,
+  variables: Record<string, LocalVariable>
+): string | undefined {
+  if (!context || !binding) return rawHex;
+
+  const variable = variables[binding.id];
+  if (!variable) return rawHex;
+
+  const resolved = context.collection
+    ? getVariableValueForMode(variable, context.modeId, context.collection, variables)
+    : tokenValueFromVariable(variable, context.modeId, variables);
+  return typeof resolved === "string" ? resolved : rawHex;
+}
+
+function isShadowOrBlur(type: string | undefined): boolean {
+  return type === "DROP_SHADOW" || type === "INNER_SHADOW" || type === "LAYER_BLUR" || type === "BACKGROUND_BLUR";
+}
+
+function isBlur(type: string | undefined): boolean {
+  return type === "LAYER_BLUR" || type === "BACKGROUND_BLUR";
+}
+
+// Build the W3C shadow/blur value array for an effect style. context selects
+// which (collection × mode) to resolve colors against; pass null to use the raw
+// resolved colors (no mode dimension). Geometry is taken as-is from the style.
+function valueFromEffectStyle(
+  doc: EffectDoc,
+  context: ModeContext | null,
+  variables: Record<string, LocalVariable>
+): Record<string, unknown>[] {
   const effects = doc.effects ?? [];
 
   return effects
-    .filter((e) => e.type === "DROP_SHADOW" || e.type === "INNER_SHADOW" || e.type === "LAYER_BLUR" || e.type === "BACKGROUND_BLUR")
+    .filter((e) => isShadowOrBlur(e.type))
     .map((effect) => {
-      if (effect.type === "LAYER_BLUR" || effect.type === "BACKGROUND_BLUR") {
+      if (isBlur(effect.type)) {
         return { radius: effect.radius };
       }
 
+      const color = colorForContext(effect.boundVariables?.color, effect.color && rgbToHex(effect.color), context, variables);
       return {
         offsetX: effect.offset?.x ?? 0,
         offsetY: effect.offset?.y ?? 0,
         blur: effect.radius,
         spread: effect.spread ?? 0,
-        color: rgbToHex(effect.color as RGBA),
+        ...(color ? { color } : {}),
         ...(effect.type === "INNER_SHADOW" ? { inset: true } : {}),
       };
     });
@@ -271,7 +324,7 @@ export async function tokenFilesFromStyles(
       }
 
       const contexts = baseCollectionId
-        ? buildTypographyContexts(baseCollectionId, variableCollections)
+        ? buildModeContexts(baseCollectionId, variableCollections, TYPOGRAPHY_BRAND_KEY)
         : [];
 
       for (const context of contexts) {
@@ -288,31 +341,106 @@ export async function tokenFilesFromStyles(
         }
       }
     } else if (styleType === "FILL") {
-      if (!result[STYLES_BRAND_KEY]) result[STYLES_BRAND_KEY] = {};
-      result[STYLES_BRAND_KEY]["color.json"] = {};
-
+      // Fill styles bind their color (solid paint or gradient stops) to a
+      // variable; that variable's collection (e.g. "Colors" with light/dark
+      // modes) and its brand extensions define the per-mode/brand output — the
+      // same walk used for typography and effects.
+      // Only the first paint is serialized by valueFromFillStyle, so detect
+      // colorCollectionId from that same paint (and its gradient stops).
+      let colorCollectionId: string | null = null;
       for (const nodeEntry of Object.values(nodesResponse.nodes)) {
-        const doc = nodeEntry.document as unknown as StyleDoc;
-        const { name, description } = doc;
-        const { type, value } = valueFromFillStyle(doc);
-        const token: Token = { $type: type, $value: value };
-        if (description) token.$description = description;
-        setNestedToken(result[STYLES_BRAND_KEY]["color.json"], name, token);
+        const doc = nodeEntry.document as unknown as FillDoc;
+        const fill = doc.fills?.[0];
+        if (!fill) continue;
+        const bindings = [ fill.boundVariables?.color, ...(fill.gradientStops ?? []).map((s) => s.boundVariables?.color) ];
+        for (const binding of bindings) {
+          const variable = binding ? variables[binding.id] : undefined;
+          if (variable) {
+            colorCollectionId = variable.variableCollectionId;
+            break;
+          }
+        }
+        if (colorCollectionId) break;
+      }
+
+      const writeColorTokens = (target: TokensFile, context: ModeContext | null): void => {
+        for (const nodeEntry of Object.values(nodesResponse.nodes)) {
+          const doc = nodeEntry.document as unknown as StyleDoc;
+          const { name, description } = doc;
+          const fillValue = valueFromFillStyle(doc, context, variables);
+          if (!fillValue) continue;
+          const { type, value } = fillValue;
+          const token: Token = { $type: type, $value: value };
+          if (description) token.$description = description;
+          setNestedToken(target, name, token);
+        }
+      };
+
+      const contexts = colorCollectionId
+        ? buildModeContexts(colorCollectionId, variableCollections, COLOR_BRAND_KEY)
+        : [];
+
+      if (contexts.length) {
+        // Color-bound fills: one file per (collection × mode), e.g. styles/color/light.json, styles/color/App/light.json
+        for (const context of contexts) {
+          if (!result[context.brandKey]) result[context.brandKey] = {};
+          if (!result[context.brandKey][context.fileName]) result[context.brandKey][context.fileName] = {};
+          writeColorTokens(result[context.brandKey][context.fileName], context);
+        }
+      } else {
+        // No color binding: single resolved file (backward compatible)
+        if (!result[STYLES_BRAND_KEY]) result[STYLES_BRAND_KEY] = {};
+        result[STYLES_BRAND_KEY]["color.json"] = {};
+        writeColorTokens(result[STYLES_BRAND_KEY]["color.json"], null);
       }
     } else if (styleType === "EFFECT") {
-      if (!result[STYLES_BRAND_KEY]) result[STYLES_BRAND_KEY] = {};
-      result[STYLES_BRAND_KEY]["effect.json"] = {};
-
+      // Effect styles bind their color to a variable; that variable's collection
+      // (e.g. "Effects" with light/dark modes) and its brand extensions define
+      // the per-mode/brand output — the same walk used for typography.
+      let colorCollectionId: string | null = null;
       for (const nodeEntry of Object.values(nodesResponse.nodes)) {
-        const doc = nodeEntry.document as unknown as StyleDoc;
-        const { name, description } = doc;
-        const values = valueFromEffectStyle(doc);
-        if (!values.length) continue;
-        const firstEffectType = doc.effects?.[0]?.type ?? "";
-        const tokenType = firstEffectType === "LAYER_BLUR" || firstEffectType === "BACKGROUND_BLUR" ? "blur" : "shadow";
-        const token: Token = { $type: tokenType, $value: values };
-        if (description) token.$description = description;
-        setNestedToken(result[STYLES_BRAND_KEY]["effect.json"], name, token);
+        const doc = nodeEntry.document as unknown as EffectDoc;
+        for (const effect of doc.effects ?? []) {
+          const binding = effect.boundVariables?.color;
+          const variable = binding ? variables[binding.id] : undefined;
+          if (variable) {
+            colorCollectionId = variable.variableCollectionId;
+            break;
+          }
+        }
+        if (colorCollectionId) break;
+      }
+
+      const writeEffectTokens = (target: TokensFile, context: ModeContext | null): void => {
+        for (const nodeEntry of Object.values(nodesResponse.nodes)) {
+          const doc = nodeEntry.document as unknown as StyleDoc;
+          const { name, description } = doc;
+          const values = valueFromEffectStyle(doc, context, variables);
+          if (!values.length) continue;
+          const firstRelevant = doc.effects?.find((e) => isShadowOrBlur(e.type));
+          const tokenType = isBlur(firstRelevant?.type) ? "blur" : "shadow";
+          const token: Token = { $type: tokenType, $value: values };
+          if (description) token.$description = description;
+          setNestedToken(target, name, token);
+        }
+      };
+
+      const contexts = colorCollectionId
+        ? buildModeContexts(colorCollectionId, variableCollections, EFFECT_BRAND_KEY)
+        : [];
+
+      if (contexts.length) {
+        // Color-bound effects: one file per (collection × mode), e.g. styles/effect/lightMode.json, styles/effect/App/lightMode.json
+        for (const context of contexts) {
+          if (!result[context.brandKey]) result[context.brandKey] = {};
+          if (!result[context.brandKey][context.fileName]) result[context.brandKey][context.fileName] = {};
+          writeEffectTokens(result[context.brandKey][context.fileName], context);
+        }
+      } else {
+        // No color binding: single resolved file (backward compatible)
+        if (!result[STYLES_BRAND_KEY]) result[STYLES_BRAND_KEY] = {};
+        result[STYLES_BRAND_KEY]["effect.json"] = {};
+        writeEffectTokens(result[STYLES_BRAND_KEY]["effect.json"], null);
       }
     }
   }
