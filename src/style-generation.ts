@@ -345,19 +345,20 @@ export async function tokenFilesFromStyles(
       // variable; that variable's collection (e.g. "Colors" with light/dark
       // modes) and its brand extensions define the per-mode/brand output — the
       // same walk used for typography and effects.
+      // Only the first paint is serialized by valueFromFillStyle, so detect
+      // colorCollectionId from that same paint (and its gradient stops).
       let colorCollectionId: string | null = null;
       for (const nodeEntry of Object.values(nodesResponse.nodes)) {
         const doc = nodeEntry.document as unknown as FillDoc;
-        for (const fill of doc.fills ?? []) {
-          const bindings = [ fill.boundVariables?.color, ...(fill.gradientStops ?? []).map((s) => s.boundVariables?.color) ];
-          for (const binding of bindings) {
-            const variable = binding ? variables[binding.id] : undefined;
-            if (variable) {
-              colorCollectionId = variable.variableCollectionId;
-              break;
-            }
+        const fill = doc.fills?.[0];
+        if (!fill) continue;
+        const bindings = [ fill.boundVariables?.color, ...(fill.gradientStops ?? []).map((s) => s.boundVariables?.color) ];
+        for (const binding of bindings) {
+          const variable = binding ? variables[binding.id] : undefined;
+          if (variable) {
+            colorCollectionId = variable.variableCollectionId;
+            break;
           }
-          if (colorCollectionId) break;
         }
         if (colorCollectionId) break;
       }
