@@ -229,6 +229,14 @@ function colorForContext(
   return typeof resolved === "string" ? resolved : rawHex;
 }
 
+function isShadowOrBlur(type: string | undefined): boolean {
+  return type === "DROP_SHADOW" || type === "INNER_SHADOW" || type === "LAYER_BLUR" || type === "BACKGROUND_BLUR";
+}
+
+function isBlur(type: string | undefined): boolean {
+  return type === "LAYER_BLUR" || type === "BACKGROUND_BLUR";
+}
+
 // Build the W3C shadow/blur value array for an effect style. context selects
 // which (collection × mode) to resolve colors against; pass null to use the raw
 // resolved colors (no mode dimension). Geometry is taken as-is from the style.
@@ -240,9 +248,9 @@ function valueFromEffectStyle(
   const effects = doc.effects ?? [];
 
   return effects
-    .filter((e) => e.type === "DROP_SHADOW" || e.type === "INNER_SHADOW" || e.type === "LAYER_BLUR" || e.type === "BACKGROUND_BLUR")
+    .filter((e) => isShadowOrBlur(e.type))
     .map((effect) => {
-      if (effect.type === "LAYER_BLUR" || effect.type === "BACKGROUND_BLUR") {
+      if (isBlur(effect.type)) {
         return { radius: effect.radius };
       }
 
@@ -408,8 +416,8 @@ export async function tokenFilesFromStyles(
           const { name, description } = doc;
           const values = valueFromEffectStyle(doc, context, variables);
           if (!values.length) continue;
-          const firstEffectType = doc.effects?.[0]?.type ?? "";
-          const tokenType = firstEffectType === "LAYER_BLUR" || firstEffectType === "BACKGROUND_BLUR" ? "blur" : "shadow";
+          const firstRelevant = doc.effects?.find((e) => isShadowOrBlur(e.type));
+          const tokenType = isBlur(firstRelevant?.type) ? "blur" : "shadow";
           const token: Token = { $type: tokenType, $value: values };
           if (description) token.$description = description;
           setNestedToken(target, name, token);
