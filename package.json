@@ -2,6 +2,14 @@
   "name": "@bonniernews/figma-variables-import",
   "version": "2.0.6",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/BonnierNews/figma-variables-import.git"
+  },
+  "bugs": {
+    "url": "https://github.com/BonnierNews/figma-variables-import/issues"
+  },
+  "homepage": "https://github.com/BonnierNews/figma-variables-import#readme",
   "engines": {
     "node": ">=22.0.0"
   },
