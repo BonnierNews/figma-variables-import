@@ -6,13 +6,13 @@ Available as both a **GitHub Action** and an **npm package** (`@bonniernews/figm
 
 ## npm package
 
-Install from the GitHub npm registry:
+Install from npmjs:
 
 ```bash
 npm install @bonniernews/figma-variables-import
 ```
 
-Add the registry to your `.npmrc`:
+The package is also published to the GitHub npm registry. To install from there instead, add the following to your `.npmrc`:
 
 ```
 @bonniernews:registry=https://npm.pkg.github.com

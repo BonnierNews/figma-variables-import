@@ -18,9 +18,6 @@
     "dist/index.js",
     "action.yml"
   ],
-  "publishConfig": {
-    "registry": "https://npm.pkg.github.com"
-  },
   "scripts": {
     "build": "npm run build:action && npm run build:package",
     "build:action": "esbuild src/main.ts --bundle --platform=node --format=esm --banner:js=\"import{createRequire}from'module';const require=createRequire(import.meta.url);\" --outfile=dist/index.js",
