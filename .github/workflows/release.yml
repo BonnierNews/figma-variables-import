@@ -32,6 +32,9 @@ jobs:
           registry-url: https://registry.npmjs.org
           scope: "@bonniernews"
 
+      - name: Update npm
+        run: npm install -g npm@^11.5.1 # We need at least npm 11.5.1 for trusted publishing
+
       - name: Publish to npmjs
         run: npm publish --access public
 
