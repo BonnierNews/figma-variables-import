@@ -1,6 +1,6 @@
 {
   "name": "@bonniernews/figma-variables-import",
-  "version": "2.0.3",
+  "version": "2.0.4",
   "type": "module",
   "engines": {
     "node": ">=22.0.0"
