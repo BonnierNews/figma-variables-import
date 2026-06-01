@@ -19,13 +19,31 @@ jobs:
         with:
           node-version: "22"
           cache: npm
-          registry-url: https://npm.pkg.github.com
 
       - run: npm ci
 
       - run: npm run build
 
-      - name: Publish to npm
+      - name: Configure npmjs registry
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: https://registry.npmjs.org
+          scope: "@bonniernews"
+
+      - name: Publish to npmjs
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPMJS_PUBLISH_TOKEN }}
+
+      - name: Configure GitHub Packages registry
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: https://npm.pkg.github.com
+          scope: "@bonniernews"
+
+      - name: Publish to GitHub Packages
         run: npm publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
