@@ -198,7 +198,7 @@ function valueFromTextStyleForContext(
     fontFamily: resolve("fontFamily", style?.fontFamily),
     fontSize: resolve("fontSize", style?.fontSize),
     fontWeight: resolve("fontWeight", style?.fontWeight),
-    lineHeight: resolve("lineHeightPx", style?.lineHeightPx),
+    lineHeight: resolve("lineHeight", style?.lineHeightPx),
     letterSpacing: resolve("letterSpacing", style?.letterSpacing),
   };
 
