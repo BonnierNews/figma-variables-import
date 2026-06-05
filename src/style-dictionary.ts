@@ -126,7 +126,19 @@ async function buildBrandCollection(
     : `${path.join(jsonOutputDir, collection, brand)}/`;
 
   const basePaths = getBaseCollectionPaths(tokensDir, collection, mode);
-  const otherFiles = allTokenFiles.filter((f) => f !== baseFile && f !== brandFile);
+  // Same names can appear under both variables/ (as variable groups whose
+  // children are individual properties) and styles/ (as composite tokens with
+  // a single $value). Including styles/ files when building a variables/
+  // collection makes the merge tree turn the shared path into a leaf with
+  // $value, hiding the variable children from the filter and dropping them
+  // from the output. For styles/ collections we currently keep variables/ files in `include`
+  // so any Style Dictionary references emitted by style generation can still resolve (if present).
+  // If style→variable references are not needed, styles/ collections could exclude variables/ too.
+  const isVariablesCollection = collection === "variables" || collection.startsWith("variables/");
+  const stylesPrefix = `${path.join(tokensDir, "styles")}${path.sep}`;
+  const otherFiles = allTokenFiles.filter((f) =>
+    f !== baseFile && f !== brandFile && !(isVariablesCollection && f.startsWith(stylesPrefix))
+  );
 
   const sd = new StyleDictionary({
     include: brand === "base" ? otherFiles : [ ...otherFiles, baseFile ],
