@@ -126,7 +126,22 @@ async function buildBrandCollection(
     : `${path.join(jsonOutputDir, collection, brand)}/`;
 
   const basePaths = getBaseCollectionPaths(tokensDir, collection, mode);
-  const otherFiles = allTokenFiles.filter((f) => f !== baseFile && f !== brandFile);
+  // Same names can appear under both variables/ (as variable groups whose
+  // children are individual properties) and styles/ (as composite tokens with
+  // a single $value). Mixing them in Style Dictionary's merge tree turns the
+  // shared path into a leaf with $value, hiding the variable children from
+  // the filter and dropping them from the output. Keep the two domains apart.
+  const stylesPrefix = `${path.join(tokensDir, "styles")}${path.sep}`;
+  const variablesPrefix = `${path.join(tokensDir, "variables")}${path.sep}`;
+  let domainPrefix: string | null = null;
+  if (collection.startsWith("variables/") || collection === "variables") {
+    domainPrefix = stylesPrefix;
+  } else if (collection.startsWith("styles/") || collection === "styles") {
+    domainPrefix = variablesPrefix;
+  }
+  const otherFiles = allTokenFiles.filter((f) =>
+    f !== baseFile && f !== brandFile && (domainPrefix === null || !f.startsWith(domainPrefix))
+  );
 
   const sd = new StyleDictionary({
     include: brand === "base" ? otherFiles : [ ...otherFiles, baseFile ],
