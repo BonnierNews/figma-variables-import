@@ -128,19 +128,16 @@ async function buildBrandCollection(
   const basePaths = getBaseCollectionPaths(tokensDir, collection, mode);
   // Same names can appear under both variables/ (as variable groups whose
   // children are individual properties) and styles/ (as composite tokens with
-  // a single $value). Mixing them in Style Dictionary's merge tree turns the
-  // shared path into a leaf with $value, hiding the variable children from
-  // the filter and dropping them from the output. Keep the two domains apart.
+  // a single $value). Including styles/ files when building a variables/
+  // collection makes the merge tree turn the shared path into a leaf with
+  // $value, hiding the variable children from the filter and dropping them
+  // from the output. The reverse direction is fine: style outputs DO need
+  // variables/ files in `include` so cross-domain references like
+  // {typography.font-family.serif.serif-headline} resolve.
+  const isVariablesCollection = collection === "variables" || collection.startsWith("variables/");
   const stylesPrefix = `${path.join(tokensDir, "styles")}${path.sep}`;
-  const variablesPrefix = `${path.join(tokensDir, "variables")}${path.sep}`;
-  let domainPrefix: string | null = null;
-  if (collection.startsWith("variables/") || collection === "variables") {
-    domainPrefix = stylesPrefix;
-  } else if (collection.startsWith("styles/") || collection === "styles") {
-    domainPrefix = variablesPrefix;
-  }
   const otherFiles = allTokenFiles.filter((f) =>
-    f !== baseFile && f !== brandFile && (domainPrefix === null || !f.startsWith(domainPrefix))
+    f !== baseFile && f !== brandFile && !(isVariablesCollection && f.startsWith(stylesPrefix))
   );
 
   const sd = new StyleDictionary({
