@@ -77,3 +77,8 @@ export function getVariableValueForMode(
 
   return tokenValueFromVariable(variable, modeId, variables);
 }
+
+/** Figma stores opacity variables as percentages (0-100); tokens express them as 0-1. */
+export function isPercentageOpacity(variable: LocalVariable): boolean {
+  return variable.resolvedType === "FLOAT" && variable.scopes.includes("OPACITY");
+}

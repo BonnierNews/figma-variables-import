@@ -5,7 +5,7 @@ import type {
 } from "@figma/rest-api-spec";
 
 import type { Token, TokensFile, BrandTokenFiles, FigmaCollectionExtras } from "./types.ts";
-import { tokenTypeFromVariable, tokenValueFromVariable, getVariableValueForMode } from "./token-value.ts";
+import { tokenTypeFromVariable, tokenValueFromVariable, getVariableValueForMode, isPercentageOpacity } from "./token-value.ts";
 
 export function collectReferencedVariableIds(
   variableIds: string[],
@@ -64,6 +64,10 @@ export function generateTokenForVariable(
     value = getVariableValueForMode(variable, modeId, collection, variables);
   } else {
     value = tokenValueFromVariable(variable, modeId, variables);
+  }
+
+  if (typeof value === "number" && isPercentageOpacity(variable)) {
+    value = value / 100;
   }
 
   const token: Token = {
