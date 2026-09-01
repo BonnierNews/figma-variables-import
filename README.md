@@ -167,6 +167,36 @@ Output is written to `example/output/tokens/` (raw W3C token JSON) and `example/
 
 ## Implementation notes
 
+### Typography style tokens
+
+Text styles are emitted in a platform-neutral shape, with Figma's enums normalised to
+CSS / React Native vocabulary so consumers can use the values directly:
+
+```json
+{
+  "fontFamily": "Siri Headline",
+  "fontFace": "Black Condensed",
+  "fontSize": 26,
+  "fontWeight": 900,
+  "fontStyle": "normal",
+  "lineHeight": 32,
+  "letterSpacing": 0,
+  "textTransform": "none",
+  "textDecoration": "none"
+}
+```
+
+`fontFace` is Figma's named face. It is emitted alongside the numeric `fontWeight`
+rather than replaced by it, because the name is not always reconstructable from the
+number — `Black Condensed` carries a width axis that `900` does not — and because
+platforms that resolve fonts by file name (Android's `res/font/<family>_<face>`) need
+it. `fontStyle` is the CSS/RN slant derived from the face, not Figma's face name.
+
+`textCase` maps to `textTransform` (`uppercase` / `lowercase` / `capitalize`), except
+small caps which is a font variant rather than a transform and is emitted as
+`fontVariant: "small-caps"`. `textDecoration` maps `UNDERLINE` / `STRIKETHROUGH` to
+`underline` / `line-through`. Both default to `"none"` so the shape is predictable.
+
 ### Collection hierarchy
 
 Figma's `LocalVariableCollection` includes an undocumented `parentVariableCollectionId` field that reliably encodes the parent-child collection hierarchy. This action uses it to nest collections correctly (e.g. `Colors/App/Brand/`) without any heuristic name matching. The resolved collection hierarchy is logged at debug level — set `ACTIONS_STEP_DEBUG=true` in your repo secrets to inspect it.
