@@ -16,6 +16,7 @@ type ExtCollection = LocalVariableCollection & FigmaCollectionExtras;
 interface ModeContext {
   collection: ExtCollection | null;
   modeId: string;
+  modeName: string;
   brandKey: string;
   fileName: string;
 }
@@ -102,6 +103,7 @@ function buildModeContexts(
       contexts.push({
         collection: isBase ? null : collection,
         modeId: mode.modeId,
+        modeName: mode.name,
         brandKey,
         fileName: modeFileName(mode.name),
       });
@@ -173,10 +175,106 @@ function valueFromFillStyle(
   };
 }
 
+const FONT_WEIGHT_BY_FACE: Record<string, number> = {
+  thin: 100,
+  extralight: 200,
+  ultralight: 200,
+  light: 300,
+  regular: 400,
+  normal: 400,
+  book: 400,
+  medium: 500,
+  semibold: 600,
+  demibold: 600,
+  bold: 700,
+  extrabold: 800,
+  ultrabold: 800,
+  black: 900,
+  heavy: 900,
+};
+
+// Figma face names are foundry-specific and may carry a width or slant alongside
+// the weight ("Black Condensed", "Bold Italic"). Try the whole name first so
+// "Extra Bold" is not read as the "bold" inside it, then fall back to single words.
+// Returns null when nothing matches, so the caller can fall back to the font's own
+// numeric weight.
+function fontWeightFromFace(face: string | null): number | null {
+  if (!face) return null;
+
+  const words = face.toLowerCase().replace(/[^a-z]+/g, " ").trim().split(" ");
+
+  for (const candidate of [ words.join(""), ...words ]) {
+    const weight = FONT_WEIGHT_BY_FACE[candidate];
+    if (weight) return weight;
+  }
+
+  console.warn(`Could not derive a font weight from the Figma font style "${face}"; falling back to the font's numeric weight.`);
+  return null;
+}
+
+// The raw Figma value for a mode, keeping variable aliases intact so the caller can
+// follow them. Mirrors getVariableValueForMode's extension-override handling.
+function rawValueForMode(
+  variable: LocalVariable,
+  modeId: string,
+  collection: ExtCollection | null
+): unknown {
+  if (collection?.isExtension && collection.variableOverrides) {
+    const override = collection.variableOverrides[variable.id]?.[modeId];
+    if (override !== undefined && override !== null) return override;
+
+    const mode = collection.modes.find((m) => m.modeId === modeId);
+    if (mode && "parentModeId" in mode && mode.parentModeId) {
+      return variable.valuesByMode[mode.parentModeId as string];
+    }
+  }
+
+  return variable.valuesByMode[modeId];
+}
+
+// Walk a variable's aliases until a literal string is reached. A font-weight
+// variable often points at a shared primitive in another collection, and
+// tokenValueFromVariable would stringify that hop into a "{token.path}" reference
+// that only Style Dictionary can resolve — too late to map a face name to a number.
+// Aliased collections have their own modes, so match the next hop by mode name (the
+// rule token generation uses for referenced variables) and fall back to its first mode.
+function literalStringForContext(
+  variable: LocalVariable,
+  context: ModeContext,
+  variables: Record<string, LocalVariable>,
+  variableCollections: Record<string, LocalVariableCollection>
+): string | null {
+  const seen = new Set<string>();
+  let current: LocalVariable | undefined = variable;
+  let modeId: string | undefined = context.modeId;
+  let collection = context.collection;
+
+  while (current && modeId && !seen.has(current.id)) {
+    seen.add(current.id);
+
+    const value = rawValueForMode(current, modeId, collection);
+    if (typeof value === "string") return value;
+    if (!value || typeof value !== "object" || !("type" in value) || value.type !== "VARIABLE_ALIAS") return null;
+
+    const next: LocalVariable | undefined = variables[(value as unknown as VariableAlias).id];
+    if (!next) return null;
+
+    const nextCollection = variableCollections[next.variableCollectionId] as ExtCollection | undefined;
+    const nextMode = nextCollection?.modes.find((m) => m.name === context.modeName) ?? nextCollection?.modes[0];
+
+    current = next;
+    modeId = nextMode?.modeId;
+    collection = nextCollection ?? null;
+  }
+
+  return null;
+}
+
 function valueFromTextStyleForContext(
   doc: TextDoc,
   context: ModeContext,
-  variables: Record<string, LocalVariable>
+  variables: Record<string, LocalVariable>,
+  variableCollections: Record<string, LocalVariableCollection>
 ): TokenValue {
   const style = doc.style;
   const bound = allBoundVariables(doc);
@@ -194,15 +292,27 @@ function valueFromTextStyleForContext(
     return rawValue;
   };
 
+  // Figma calls the named font face the "style" (Regular, Semibold, Bold Italic,
+  // Black Condensed), and that is the key a font-weight variable binds to — there is
+  // no fontWeight binding to find. `style.fontWeight` is only the numeric weight of
+  // the base node's font file and has no mode dimension, so on its own it never
+  // varies by brand. Resolve the binding to a literal face name and derive both the
+  // weight and the slant from it.
+  const boundFontStyle = bound.fontStyle;
+  const boundFace = boundFontStyle
+    ? literalStringForContext(variables[resolveAlias(boundFontStyle).id], context, variables, variableCollections)
+    : null;
+  const face = boundFace ?? style?.fontStyle ?? null;
+
   const value: Record<string, unknown> = {
     fontFamily: resolve("fontFamily", style?.fontFamily),
     fontSize: resolve("fontSize", style?.fontSize),
-    fontWeight: resolve("fontWeight", style?.fontWeight),
+    fontWeight: fontWeightFromFace(face) ?? resolve("fontWeight", style?.fontWeight),
     lineHeight: resolve("lineHeight", style?.lineHeightPx),
     letterSpacing: resolve("letterSpacing", style?.letterSpacing),
   };
 
-  if (style?.fontStyle) value.fontStyle = style.fontStyle.toLowerCase().includes("italic") ? "italic" : "normal";
+  if (face) value.fontStyle = face.toLowerCase().includes("italic") ? "italic" : "normal";
   if (style?.textCase === "UPPER") value.textTransform = "uppercase";
 
   return value;
@@ -334,7 +444,7 @@ export async function tokenFilesFromStyles(
         for (const nodeEntry of Object.values(nodesResponse.nodes)) {
           const doc = nodeEntry.document as unknown as StyleDoc;
           const { name, description } = doc;
-          const value = valueFromTextStyleForContext(doc, context, variables);
+          const value = valueFromTextStyleForContext(doc, context, variables, variableCollections);
           const token: Token = { $type: "typography", $value: value };
           if (description) token.$description = description;
           setNestedToken(result[context.brandKey][context.fileName], name, token);
