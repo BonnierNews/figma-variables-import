@@ -46,6 +46,7 @@ interface TextDoc {
     lineHeightPx?: number;
     letterSpacing?: number;
     textCase?: string;
+    textDecoration?: string;
     // Figma may put typography variable bindings inside style
     boundVariables?: Record<string, VariableAlias | VariableAlias[]>;
   };
@@ -193,6 +194,24 @@ const FONT_WEIGHT_BY_FACE: Record<string, number> = {
   heavy: 900,
 };
 
+// Figma's textCase covers both CSS text-transform and font-variant; small caps is a
+// variant, not a transform, so the two are kept apart.
+const TEXT_TRANSFORM_BY_CASE: Record<string, string> = {
+  UPPER: "uppercase",
+  LOWER: "lowercase",
+  TITLE: "capitalize",
+};
+
+const FONT_VARIANT_BY_CASE: Record<string, string> = {
+  SMALL_CAPS: "small-caps",
+  SMALL_CAPS_FORCED: "small-caps",
+};
+
+const TEXT_DECORATION_BY_FIGMA: Record<string, string> = {
+  UNDERLINE: "underline",
+  STRIKETHROUGH: "line-through",
+};
+
 // Figma face names are foundry-specific and may carry a width or slant alongside
 // the weight ("Black Condensed", "Bold Italic"). Try the whole name first so
 // "Extra Bold" is not read as the "bold" inside it, then fall back to single words.
@@ -304,16 +323,25 @@ function valueFromTextStyleForContext(
     : null;
   const face = boundFace ?? style?.fontStyle ?? null;
 
+  // The face name is the only place a width or an unconventional weight survives
+  // ("Black Condensed" cannot be reconstructed from 900), and platforms that resolve
+  // fonts by file name need it, so it is emitted alongside the numeric weight rather
+  // than replaced by it. Figma's enums are normalised to CSS/React Native vocabulary
+  // so every consumer can use the values directly.
   const value: Record<string, unknown> = {
     fontFamily: resolve("fontFamily", style?.fontFamily),
+    fontFace: face,
     fontSize: resolve("fontSize", style?.fontSize),
     fontWeight: fontWeightFromFace(face) ?? resolve("fontWeight", style?.fontWeight),
+    fontStyle: face?.toLowerCase().includes("italic") ? "italic" : "normal",
     lineHeight: resolve("lineHeight", style?.lineHeightPx),
     letterSpacing: resolve("letterSpacing", style?.letterSpacing),
+    textTransform: (style?.textCase && TEXT_TRANSFORM_BY_CASE[style.textCase]) ?? "none",
+    textDecoration: (style?.textDecoration && TEXT_DECORATION_BY_FIGMA[style.textDecoration]) ?? "none",
   };
 
-  if (face) value.fontStyle = face.toLowerCase().includes("italic") ? "italic" : "normal";
-  if (style?.textCase === "UPPER") value.textTransform = "uppercase";
+  const fontVariant = style?.textCase && FONT_VARIANT_BY_CASE[style.textCase];
+  if (fontVariant) value.fontVariant = fontVariant;
 
   return value;
 }
