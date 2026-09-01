@@ -66,7 +66,7 @@ export function generateTokenForVariable(
     value = tokenValueFromVariable(variable, modeId, variables);
   }
 
-  if (typeof value === "number" && isPercentageOpacity(variable)) {
+  if (typeof value === "number" && value > 1 && isPercentageOpacity(variable)) {
     value = value / 100;
   }
 
