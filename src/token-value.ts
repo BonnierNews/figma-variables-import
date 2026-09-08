@@ -18,6 +18,93 @@ export function tokenTypeFromVariable(variable: LocalVariable): string {
   }
 }
 
+// Figma returns a color with opacity as a COMPOSE_COLOR expression instead of an RGBA
+// value. @figma/rest-api-spec does not type it (as of 0.42.0), so declare it here.
+interface VariableExpression {
+  type: "VARIABLE_EXPRESSION";
+  expressionFunction: string;
+  expressionArguments: unknown[];
+}
+
+function isVariableExpression(value: unknown): value is VariableExpression {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "type" in value &&
+    (value as { type: unknown }).type === "VARIABLE_EXPRESSION"
+  );
+}
+
+function isVariableAlias(value: unknown): value is { id: string } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "type" in value &&
+    (value as { type: unknown }).type === "VARIABLE_ALIAS"
+  );
+}
+
+function rgbaFromRawValue(
+  value: unknown,
+  modeId: string,
+  localVariables: Record<string, LocalVariable>,
+  seen: Set<string>
+): RGBA | null {
+  if (isVariableExpression(value)) {
+    return rgbaFromComposeColor(value, modeId, localVariables, seen);
+  }
+
+  if (isVariableAlias(value)) {
+    if (seen.has(value.id)) return null;
+    seen.add(value.id);
+
+    const aliasedVariable = localVariables[value.id];
+    if (!aliasedVariable) return null;
+
+    const aliasedValue = aliasedVariable.valuesByMode[modeId]
+      ?? Object.values(aliasedVariable.valuesByMode)[0];
+    return rgbaFromRawValue(aliasedValue, modeId, localVariables, seen);
+  }
+
+  if (typeof value === "object" && value !== null && "r" in value) {
+    const { r, g, b, a } = value as RGBA;
+    return { r, g, b, a: typeof a === "number" ? a : 1 };
+  }
+
+  return null;
+}
+
+/** COMPOSE_COLOR(baseColor, opacity) — opacity is a percentage (0-100) applied to the base alpha. */
+function rgbaFromComposeColor(
+  expression: VariableExpression,
+  modeId: string,
+  localVariables: Record<string, LocalVariable>,
+  seen: Set<string>
+): RGBA | null {
+  if (expression.expressionFunction !== "COMPOSE_COLOR") return null;
+
+  const [ baseArgument, opacityArgument ] = expression.expressionArguments;
+  if (typeof opacityArgument !== "number") return null;
+
+  const base = rgbaFromRawValue(baseArgument, modeId, localVariables, seen);
+  if (!base) return null;
+
+  return { ...base, a: base.a * (opacityArgument / 100) };
+}
+
+function hexFromVariableExpression(
+  expression: VariableExpression,
+  modeId: string,
+  localVariables: Record<string, LocalVariable>
+): string {
+  const rgba = rgbaFromComposeColor(expression, modeId, localVariables, new Set());
+  if (!rgba) {
+    throw new Error(`Could not resolve variable expression: ${JSON.stringify(expression)}`);
+  }
+
+  return rgbToHex(rgba);
+}
+
 export function tokenValueFromVariable(
   variable: LocalVariable,
   modeId: string,
@@ -26,7 +113,9 @@ export function tokenValueFromVariable(
   const value = variable.valuesByMode[modeId];
 
   if (typeof value === "object" && value !== null) {
-    if ("type" in value && value.type === "VARIABLE_ALIAS") {
+    if (isVariableExpression(value)) {
+      return hexFromVariableExpression(value, modeId, localVariables);
+    } else if ("type" in value && value.type === "VARIABLE_ALIAS") {
       const aliasedVariable = localVariables[value.id];
       if (aliasedVariable) {
         return `{${aliasedVariable.name.replace(/\//g, ".").replace(/\s+/g, "-")}}`;
@@ -55,7 +144,9 @@ export function getVariableValueForMode(
     if (overrides && overrides[modeId]) {
       const overrideValue = overrides[modeId];
       if (typeof overrideValue === "object" && overrideValue !== null) {
-        if ("type" in overrideValue && overrideValue.type === "VARIABLE_ALIAS") {
+        if (isVariableExpression(overrideValue)) {
+          return hexFromVariableExpression(overrideValue, modeId, variables);
+        } else if ("type" in overrideValue && overrideValue.type === "VARIABLE_ALIAS") {
           const aliasedVariable = variables[(overrideValue as { id: string }).id];
           if (aliasedVariable) {
             return `{${aliasedVariable.name.replace(/\//g, ".").replace(/\s+/g, "-")}}`;
