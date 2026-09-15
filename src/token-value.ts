@@ -35,6 +35,23 @@ function isVariableExpression(value: unknown): value is VariableExpression {
   );
 }
 
+// Figma now returns a color with opacity as a { color, opacity } object instead of a
+// COMPOSE_COLOR expression. @figma/rest-api-spec does not type it (as of 0.42.0).
+interface ComposeColorValue {
+  color: unknown;
+  opacity: number;
+}
+
+function isComposeColorValue(value: unknown): value is ComposeColorValue {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "color" in value &&
+    "opacity" in value &&
+    typeof (value as { opacity: unknown }).opacity === "number"
+  );
+}
+
 function isVariableAlias(value: unknown): value is { id: string } {
   return (
     typeof value === "object" &&
@@ -52,6 +69,13 @@ function rgbaFromRawValue(
 ): RGBA | null {
   if (isVariableExpression(value)) {
     return rgbaFromComposeColor(value, modeId, localVariables, seen);
+  }
+
+  if (isComposeColorValue(value)) {
+    const base = rgbaFromRawValue(value.color, modeId, localVariables, seen);
+    if (!base) return null;
+
+    return { ...base, a: base.a * (value.opacity / 100) };
   }
 
   if (isVariableAlias(value)) {
@@ -92,6 +116,19 @@ function rgbaFromComposeColor(
   return { ...base, a: base.a * (opacityArgument / 100) };
 }
 
+function hexFromComposeColorValue(
+  value: ComposeColorValue,
+  modeId: string,
+  localVariables: Record<string, LocalVariable>
+): string {
+  const rgba = rgbaFromRawValue(value, modeId, localVariables, new Set());
+  if (!rgba) {
+    throw new Error(`Could not resolve color value: ${JSON.stringify(value)}`);
+  }
+
+  return rgbToHex(rgba);
+}
+
 function hexFromVariableExpression(
   expression: VariableExpression,
   modeId: string,
@@ -115,6 +152,8 @@ export function tokenValueFromVariable(
   if (typeof value === "object" && value !== null) {
     if (isVariableExpression(value)) {
       return hexFromVariableExpression(value, modeId, localVariables);
+    } else if (isComposeColorValue(value)) {
+      return hexFromComposeColorValue(value, modeId, localVariables);
     } else if ("type" in value && value.type === "VARIABLE_ALIAS") {
       const aliasedVariable = localVariables[value.id];
       if (aliasedVariable) {
@@ -146,6 +185,8 @@ export function getVariableValueForMode(
       if (typeof overrideValue === "object" && overrideValue !== null) {
         if (isVariableExpression(overrideValue)) {
           return hexFromVariableExpression(overrideValue, modeId, variables);
+        } else if (isComposeColorValue(overrideValue)) {
+          return hexFromComposeColorValue(overrideValue, modeId, variables);
         } else if ("type" in overrideValue && overrideValue.type === "VARIABLE_ALIAS") {
           const aliasedVariable = variables[(overrideValue as { id: string }).id];
           if (aliasedVariable) {
