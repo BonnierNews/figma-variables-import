@@ -30,6 +30,16 @@ inputs:
       Example: "Deprecated,Internal,OldBrand"
     required: false
     default: ""
+  included-collections:
+    description: >
+      Comma-separated list of Figma extension collection names to opt in to.
+      When set, only these extension collections (plus their parent and child
+      collections) are output; other extension collections, e.g. other brands,
+      are skipped. Base collections are always kept. Matching is case-insensitive
+      and supports "*" as a wildcard. Fails if a name matches no collection.
+      Example: "DN WEB" or "* WEB"
+    required: false
+    default: ""
   style-dictionary-config:
     description: >
       Path to a Style Dictionary v5 config file in the calling repo (relative to repo root).

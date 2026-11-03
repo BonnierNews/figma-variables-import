@@ -1,6 +1,7 @@
 import type { GetLocalVariablesResponse, LocalVariable, LocalVariableCollection, RGBA } from "@figma/rest-api-spec";
 
 import type { Token, TokensFile, BrandTokenFiles, TokenValue, FigmaCollectionExtras } from "./types.ts";
+import type { CollectionPredicate } from "./collection-filter.ts";
 import { getFileStyles, getFileNodes } from "./figma-api.ts";
 import { tokenValueFromVariable, getVariableValueForMode } from "./token-value.ts";
 import { rgbToHex } from "./utils.ts";
@@ -90,7 +91,8 @@ function allBoundVariables(doc: TextDoc): Record<string, VariableAlias | Variabl
 function buildModeContexts(
   baseCollectionId: string,
   variableCollections: Record<string, LocalVariableCollection>,
-  baseBrandKey: string
+  baseBrandKey: string,
+  isIncluded: CollectionPredicate
 ): ModeContext[] {
   const allCollections = variableCollections as Record<string, ExtCollection>;
   const contexts: ModeContext[] = [];
@@ -111,7 +113,7 @@ function buildModeContexts(
     }
 
     for (const coll of Object.values(allCollections)) {
-      if (coll.parentVariableCollectionId === collId && !coll.remote) {
+      if (coll.parentVariableCollectionId === collId && !coll.remote && isIncluded(coll.id)) {
         walk(coll.id, `${brandKey}/${coll.name}`);
       }
     }
@@ -421,7 +423,8 @@ function setNestedToken(root: TokensFile, namePath: string, token: Token): void 
 export async function tokenFilesFromStyles(
   fileId: string,
   accessToken: string,
-  localVariablesResponse: GetLocalVariablesResponse
+  localVariablesResponse: GetLocalVariablesResponse,
+  isIncluded: CollectionPredicate = () => true
 ): Promise<BrandTokenFiles> {
   const { variables, variableCollections } = localVariablesResponse.meta;
 
@@ -462,7 +465,7 @@ export async function tokenFilesFromStyles(
       }
 
       const contexts = baseCollectionId
-        ? buildModeContexts(baseCollectionId, variableCollections, TYPOGRAPHY_BRAND_KEY)
+        ? buildModeContexts(baseCollectionId, variableCollections, TYPOGRAPHY_BRAND_KEY, isIncluded)
         : [];
 
       for (const context of contexts) {
@@ -515,7 +518,7 @@ export async function tokenFilesFromStyles(
       };
 
       const contexts = colorCollectionId
-        ? buildModeContexts(colorCollectionId, variableCollections, COLOR_BRAND_KEY)
+        ? buildModeContexts(colorCollectionId, variableCollections, COLOR_BRAND_KEY, isIncluded)
         : [];
 
       if (contexts.length) {
@@ -564,7 +567,7 @@ export async function tokenFilesFromStyles(
       };
 
       const contexts = colorCollectionId
-        ? buildModeContexts(colorCollectionId, variableCollections, EFFECT_BRAND_KEY)
+        ? buildModeContexts(colorCollectionId, variableCollections, EFFECT_BRAND_KEY, isIncluded)
         : [];
 
       if (contexts.length) {

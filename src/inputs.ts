@@ -7,6 +7,7 @@ export interface ActionInputs {
   tokensOutputPath: string | null;
   jsonOutputPath: string | null;
   excludedCollections: Set<string>;
+  includedCollections: string[];
   sdConfigPath: string | null;
   sdTransforms: string[];
   sdOutputFormat: string;
@@ -41,6 +42,11 @@ export function parseInputs(): ActionInputs {
       .filter((s) => s.length > 0)
   );
 
+  const includedCollections = core.getInput("included-collections")
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+
   const sdConfigRaw = core.getInput("style-dictionary-config").trim();
   const sdConfigPath = sdConfigRaw ? path.join(workspace, sdConfigRaw) : null;
 
@@ -57,6 +63,7 @@ export function parseInputs(): ActionInputs {
     tokensOutputPath,
     jsonOutputPath,
     excludedCollections,
+    includedCollections,
     sdConfigPath,
     sdTransforms,
     sdOutputFormat,

@@ -29,6 +29,7 @@ await syncFigmaVariables({
   tokensOutputPath: "/path/to/repo/design-tokens/tokens",
   jsonOutputPath: "/path/to/repo/design-tokens/json",
   excludedCollections: [ "Deprecated", "Internal" ],
+  includedCollections: [ "DN WEB" ], // opt in to a single brand/platform
 });
 ```
 
@@ -45,6 +46,7 @@ Both output paths are optional, but at least one must be provided. Omitting `tok
 | `tokensOutputPath` | no* | — | Absolute path where raw W3C token JSON files are written. Omit to skip. |
 | `jsonOutputPath` | no* | — | Absolute path where Style Dictionary output is written. Omit to skip. |
 | `excludedCollections` | no | `[]` | Collection names to skip (array or Set) |
+| `includedCollections` | no | `[]` | Opt-in list of extension collection names to keep (array or Set). See [Including collections](#including-collections-opt-in) |
 | `sdConfigPath` | no | — | Absolute path to a Style Dictionary v5 config file. Takes full precedence over `sdTransforms`/`sdOutputFormat` |
 | `sdTransforms` | no | `["attribute/cti", "name/kebab", "size/rem"]` | SD transforms to apply |
 | `sdOutputFormat` | no | `"json/nested"` | SD output format |
@@ -71,6 +73,7 @@ The calling workflow must:
 | `tokens-output-path` | no* | — | Path where raw W3C token JSON files are written, mirroring the Figma collection hierarchy. Omit to skip. |
 | `json-output-path` | no* | — | Path where Style Dictionary output is written. Omit to skip. |
 | `excluded-collections` | no | `""` | Comma-separated list of Figma collection names to skip |
+| `included-collections` | no | `""` | Comma-separated opt-in list of extension collection names to keep, e.g. `DN WEB`. See [Including collections](#including-collections-opt-in) |
 | `style-dictionary-config` | no | `""` | Path to a Style Dictionary v5 config file (relative to repo root). Takes full precedence — `sd-transforms` and `sd-output-format` are ignored when set |
 | `sd-transforms` | no | `attribute/cti,name/kebab,size/rem` | Comma-separated SD transform names. Used only when `style-dictionary-config` is not provided |
 | `sd-output-format` | no | `json/nested` | Style Dictionary output format. Used only when `style-dictionary-config` is not provided |
@@ -166,6 +169,22 @@ Output is written to `example/output/tokens/` (raw W3C token JSON) and `example/
 ---
 
 ## Implementation notes
+
+### Including collections (opt-in)
+
+`includedCollections` / `included-collections` is the opt-in counterpart to the exclude list. Use it to
+export only the tokens for one brand or platform, e.g. `DN WEB`, instead of excluding every other brand.
+
+When the list is non-empty:
+
+- **Base collections** (e.g. `Colors`, `Typography`, primitives) are always kept, because extensions build on them.
+- **Extension collections** are kept only when they match a name, or are an **ancestor** or **descendant** of a
+  matching collection. With `Colors → Web → DN WEB`, including `DN WEB` keeps `Colors`, `Web` and `DN WEB`,
+  and drops siblings such as `EXP WEB` or `App → DN APP`.
+- The same filter applies to style output (`styles/color/…`, `styles/typography/…`, `styles/effect/…`).
+- Matching is case-insensitive and `*` is a wildcard: `* WEB` keeps every web brand, `DN *` keeps every DN brand.
+- A name that matches no collection fails the run (listing the available names), so a typo can't silently produce base-only output.
+- `excludedCollections` still applies on top of the include list.
 
 ### Typography style tokens
 
