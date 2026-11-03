@@ -71,7 +71,7 @@ The calling workflow must:
 | `figma-token` | yes | — | Figma personal access token |
 | `figma-file-id` | yes | — | The Figma file ID to fetch variables from |
 | `tokens-output-path` | no* | — | Path where raw W3C token JSON files are written, mirroring the Figma collection hierarchy. Omit to skip. |
-| `json-output-path` | no* | — | Path where Style Dictionary output is written. Only the lowest level of each brand hierarchy is written (see [Style Dictionary output levels](#style-dictionary-output-levels)). Omit to skip. |
+| `json-output-path` | no* | — | Path where Style Dictionary output is written. Output is grouped into one folder per brand (see [Style Dictionary output layout](#style-dictionary-output-layout)). Omit to skip. |
 | `excluded-collections` | no | `""` | Comma-separated list of Figma collection names to skip |
 | `included-collections` | no | `""` | Comma-separated opt-in list of extension collection names to keep, e.g. `DN WEB`. See [Including collections](#including-collections-opt-in) |
 | `style-dictionary-config` | no | `""` | Path to a Style Dictionary v5 config file (relative to repo root). Takes full precedence — `sd-transforms` and `sd-output-format` are ignored when set |
@@ -220,15 +220,39 @@ small caps which is a font variant rather than a transform and is emitted as
 
 Figma's `LocalVariableCollection` includes an undocumented `parentVariableCollectionId` field that reliably encodes the parent-child collection hierarchy. This action uses it to nest collections correctly (e.g. `Colors/App/Brand/`) without any heuristic name matching. The resolved collection hierarchy is logged at debug level — set `ACTIONS_STEP_DEBUG=true` in your repo secrets to inspect it.
 
-### Style Dictionary output levels
+### Style Dictionary output layout
 
-With the default (inline) SD config, `json-output-path` only gets the lowest level of each brand hierarchy.
-For `typography → DN → DN Web`, only `typography/DN/DN Web/<mode>.json` is written, not `typography/<mode>.json`
-or `typography/DN/<mode>.json`. Every level's token file already holds the complete set of tokens, so the
-lowest level includes everything it inherits. A collection with no brands is written at its own level.
-`tokens-output-path` is not affected and still mirrors the full hierarchy.
+With the default (inline) SD config, `json-output-path` gets one folder per brand, each holding a complete
+set of collections:
+
+```
+json/
+  DN Web/
+    variables/Color/lightmode.json
+    variables/Metrics/smallScreen.json
+    styles/typography/largeScreen.json
+    …
+  Local App Casual/
+    …
+```
+
+- **Brands** are the lowest level of each brand hierarchy (e.g. `DN → DN Web`). Every level's token file
+  already holds the complete set of tokens, so the lowest level includes everything it inherits.
+- **Folder name**: the top-level group is dropped and the remaining levels are joined with spaces
+  (`DN/DN Web` → `DN Web`, `Local/Local App/Casual` → `Local App Casual`). If two brands would get the same
+  folder name, the run fails.
+- **Different depths per collection**: when a collection does not go as deep as the brand (e.g. Color has
+  `Local App → Casual` but Metrics stops at `Local App`), the brand folder gets the deepest level that
+  collection has.
+- **Collections without brands** are written into every brand folder.
+- The brand folder is always written, even when only one brand is imported, so it is visible in review which
+  brand the values belong to. Only when the import has no brands at all is output written directly to
+  `variables/…` and `styles/…`.
+- Before writing, earlier output is removed: `variables/`, `styles/` and any folder containing a `variables/`
+  or `styles/` folder. Other files in `json-output-path` are left alone.
+
+`tokens-output-path` is not affected and still mirrors the full Figma hierarchy.
 
 ### Style Dictionary reference resolution
 
 When using the default (inline) SD config, all token files are passed as `include` sources so Style Dictionary can resolve cross-collection references. Figma formula strings that are not valid SD references produce warnings rather than errors.
-

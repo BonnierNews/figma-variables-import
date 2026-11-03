@@ -105,7 +105,7 @@ function collectAllTokenFiles(dir: string): string[] {
 
 async function buildBrandCollection(
   tokensDir: string,
-  jsonOutputDir: string,
+  buildDir: string,
   collection: string,
   brand: string,
   mode: string,
@@ -121,9 +121,7 @@ async function buildBrandCollection(
     : path.join(tokensDir, collection, brand, `${mode}.json`);
   if (!fs.existsSync(brandFile)) return;
 
-  const buildPath = brand === "base"
-    ? `${path.join(jsonOutputDir, collection)}/`
-    : `${path.join(jsonOutputDir, collection, brand)}/`;
+  const buildPath = `${buildDir}/`;
 
   const basePaths = getBaseCollectionPaths(tokensDir, collection, mode);
   // Same names can appear under both variables/ (as variable groups whose
@@ -163,11 +161,69 @@ async function buildBrandCollection(
   await sd.buildAllPlatforms();
 }
 
+// Brand chains are relative to a collection directory, e.g. "DN/DN Web" or "Local/Local App/Casual".
+// A final brand is a leaf chain (in any collection) that no other leaf chain extends. Brand depth can
+// differ per collection (Color may go down to "Local/Local App/Casual" while Metrics stops at
+// "Local/Local App"), so final brands are resolved across all collections, not per collection.
+function getFinalBrands(leafChains: string[]): string[] {
+  const unique = [ ...new Set(leafChains) ];
+  return unique.filter((chain) => !unique.some((other) => other.startsWith(`${chain}/`))).sort();
+}
+
+// The deepest chain in a collection that is the final brand itself or one of its ancestors.
+// Returns "base" when the collection has no brands at all, null when none of its brands apply.
+function resolveBrandForCollection(finalBrand: string, collectionBrands: string[]): string | null {
+  if (collectionBrands.length === 0) return "base";
+  const candidates = collectionBrands.filter((chain) => chain === finalBrand || finalBrand.startsWith(`${chain}/`));
+  if (candidates.length === 0) return null;
+  return candidates.reduce((a, b) => (b.split("/").length > a.split("/").length ? b : a));
+}
+
+// Output folder name for a final brand: the top-level group is dropped and the rest is joined
+// with spaces ("DN/DN Web" → "DN Web", "Local/Local App/Casual" → "Local App Casual").
+function brandFolderName(chain: string): string {
+  const segments = chain.split("/");
+  return segments.length > 1 ? segments.slice(1).join(" ") : segments[0];
+}
+
+function getBrandFolders(finalBrands: string[]): Map<string, string> {
+  const folders = new Map<string, string>();
+  const byName = new Map<string, string[]>();
+  for (const chain of finalBrands) {
+    const name = brandFolderName(chain);
+    folders.set(chain, name);
+    byName.set(name, [ ...(byName.get(name) ?? []), chain ]);
+  }
+  const clashes = [ ...byName.entries() ].filter(([ , chains ]) => chains.length > 1);
+  if (clashes.length > 0) {
+    throw new Error(
+      `Style Dictionary: brands would be written to the same folder: ${clashes
+        .map(([ name, chains ]) => `"${name}" (${chains.join(", ")})`)
+        .join("; ")}`
+    );
+  }
+  return folders;
+}
+
+// Removes output from previous runs: the brand-less layout (variables/, styles/) and any brand
+// folder, recognised by containing a variables/ or styles/ directory. Other files are left alone.
+function cleanJsonOutput(jsonOutputPath: string): void {
+  if (!fs.existsSync(jsonOutputPath)) return;
+  for (const entry of fs.readdirSync(jsonOutputPath, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const dir = path.join(jsonOutputPath, entry.name);
+    const isGenerated = entry.name === "variables"
+      || entry.name === "styles"
+      || fs.existsSync(path.join(dir, "variables"))
+      || fs.existsSync(path.join(dir, "styles"));
+    if (isGenerated) fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
 export async function runStyleDictionary(options: StyleDictionaryOptions): Promise<void> {
   const { tokensOutputPath, jsonOutputPath, sdConfigPath, sdTransforms, sdOutputFormat } = options;
 
-  fs.rmSync(path.join(jsonOutputPath, "variables"), { recursive: true, force: true });
-  fs.rmSync(path.join(jsonOutputPath, "styles"), { recursive: true, force: true });
+  cleanJsonOutput(jsonOutputPath);
 
   if (sdConfigPath) {
     let config: unknown;
@@ -183,25 +239,41 @@ export async function runStyleDictionary(options: StyleDictionaryOptions): Promi
     return;
   }
 
-  const collections = getCollections(tokensOutputPath);
-  console.log(`Style Dictionary: processing collections: ${collections.join(", ")}`);
+  const collections = getCollections(tokensOutputPath).map((collection) => {
+    const brands = getBrandsForCollection(tokensOutputPath, collection);
+    // Only the lowest level of each brand chain is output: every level's token file is a complete
+    // set, so the leaf already holds everything it inherits.
+    const leafBrands = brands.filter((brand) => !brands.some((other) => other.startsWith(`${brand}/`)));
+    return { collection, brands, leafBrands, modes: getModesForCollection(tokensOutputPath, collection) };
+  });
+
+  const finalBrands = getFinalBrands(collections.flatMap((c) => c.leafBrands));
+  const brandFolders = getBrandFolders(finalBrands);
+
+  // Each target is one brand folder (or the output root when there are no brands) with one
+  // source brand chain per collection.
+  const targets = finalBrands.length > 0
+    ? finalBrands.map((finalBrand) => ({
+      folder: brandFolders.get(finalBrand) as string,
+      sources: collections.map((c) => ({ ...c, brand: resolveBrandForCollection(finalBrand, c.brands) })),
+    }))
+    : [ { folder: "", sources: collections.map((c) => ({ ...c, brand: "base" as string | null })) } ];
 
   const allTokenFiles = collectAllTokenFiles(tokensOutputPath);
 
-  for (const collection of collections) {
-    const modes = getModesForCollection(tokensOutputPath, collection);
-    // Only the lowest level of each brand chain is output (e.g. DN/DN Web, not DN or the base):
-    // every level's token file is a complete set, so the leaf already holds everything it inherits.
-    const allBrands = getBrandsForCollection(tokensOutputPath, collection);
-    const leafBrands = allBrands.filter((brand) => !allBrands.some((other) => other.startsWith(`${brand}/`)));
-    const brands = leafBrands.length > 0 ? leafBrands : [ "base" ];
+  for (const { folder, sources } of targets) {
+    const mapping = sources
+      .filter((s) => s.brand !== null)
+      .map((s) => `${s.collection}${s.brand === "base" ? "" : ` (${s.brand})`}`);
+    console.log(`Style Dictionary: ${folder || "(no brands)"} ← ${mapping.join(", ")}`);
 
-    try {
-      for (const brand of brands) {
+    for (const { collection, brand, modes } of sources) {
+      if (brand === null) continue;
+      try {
         for (const mode of modes) {
           await buildBrandCollection(
             tokensOutputPath,
-            jsonOutputPath,
+            path.join(jsonOutputPath, folder, collection),
             collection,
             brand,
             mode,
@@ -210,9 +282,9 @@ export async function runStyleDictionary(options: StyleDictionaryOptions): Promi
             sdOutputFormat
           );
         }
+      } catch (err) {
+        console.warn(`Style Dictionary failed for collection "${collection}"${folder ? ` in "${folder}"` : ""}: ${err instanceof Error ? err.message : String(err)}`);
       }
-    } catch (err) {
-      console.warn(`Style Dictionary failed for collection "${collection}": ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 }
