@@ -190,7 +190,11 @@ export async function runStyleDictionary(options: StyleDictionaryOptions): Promi
 
   for (const collection of collections) {
     const modes = getModesForCollection(tokensOutputPath, collection);
-    const brands = [ "base", ...getBrandsForCollection(tokensOutputPath, collection) ];
+    // Only the lowest level of each brand chain is output (e.g. DN/DN Web, not DN or the base):
+    // every level's token file is a complete set, so the leaf already holds everything it inherits.
+    const allBrands = getBrandsForCollection(tokensOutputPath, collection);
+    const leafBrands = allBrands.filter((brand) => !allBrands.some((other) => other.startsWith(`${brand}/`)));
+    const brands = leafBrands.length > 0 ? leafBrands : [ "base" ];
 
     try {
       for (const brand of brands) {

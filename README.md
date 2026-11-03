@@ -71,7 +71,7 @@ The calling workflow must:
 | `figma-token` | yes | — | Figma personal access token |
 | `figma-file-id` | yes | — | The Figma file ID to fetch variables from |
 | `tokens-output-path` | no* | — | Path where raw W3C token JSON files are written, mirroring the Figma collection hierarchy. Omit to skip. |
-| `json-output-path` | no* | — | Path where Style Dictionary output is written. Omit to skip. |
+| `json-output-path` | no* | — | Path where Style Dictionary output is written. Only the lowest level of each brand hierarchy is written (see [Style Dictionary output levels](#style-dictionary-output-levels)). Omit to skip. |
 | `excluded-collections` | no | `""` | Comma-separated list of Figma collection names to skip |
 | `included-collections` | no | `""` | Comma-separated opt-in list of extension collection names to keep, e.g. `DN WEB`. See [Including collections](#including-collections-opt-in) |
 | `style-dictionary-config` | no | `""` | Path to a Style Dictionary v5 config file (relative to repo root). Takes full precedence — `sd-transforms` and `sd-output-format` are ignored when set |
@@ -219,6 +219,14 @@ small caps which is a font variant rather than a transform and is emitted as
 ### Collection hierarchy
 
 Figma's `LocalVariableCollection` includes an undocumented `parentVariableCollectionId` field that reliably encodes the parent-child collection hierarchy. This action uses it to nest collections correctly (e.g. `Colors/App/Brand/`) without any heuristic name matching. The resolved collection hierarchy is logged at debug level — set `ACTIONS_STEP_DEBUG=true` in your repo secrets to inspect it.
+
+### Style Dictionary output levels
+
+With the default (inline) SD config, `json-output-path` only gets the lowest level of each brand hierarchy.
+For `typography → DN → DN Web`, only `typography/DN/DN Web/<mode>.json` is written, not `typography/<mode>.json`
+or `typography/DN/<mode>.json`. Every level's token file already holds the complete set of tokens, so the
+lowest level includes everything it inherits. A collection with no brands is written at its own level.
+`tokens-output-path` is not affected and still mirrors the full hierarchy.
 
 ### Style Dictionary reference resolution
 
