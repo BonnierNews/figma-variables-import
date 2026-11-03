@@ -2,11 +2,14 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
+import { createIncludedCollectionsFilter } from "./collection-filter.ts";
 import { getLocalVariables } from "./figma-api.ts";
 import { runStyleDictionary } from "./style-dictionary.ts";
 import { tokenFilesFromLocalVariables } from "./token-generation.ts";
 import { tokenFilesFromStyles } from "./style-generation.ts";
 import { writeTokenFiles } from "./write-tokens.ts";
+
+export { InputError } from "./collection-filter.ts";
 
 export interface SyncOptions {
   figmaToken: string;
@@ -17,6 +20,12 @@ export interface SyncOptions {
   jsonOutputPath?: string;
   /** Collection names to skip entirely */
   excludedCollections?: Set<string> | string[];
+  /**
+   * Opt-in filter: extension collection names to include (case-insensitive, "*" wildcard).
+   * Base collections, plus ancestors and descendants of matched collections, are kept;
+   * other extension collections are dropped. Empty/omitted includes everything.
+   */
+  includedCollections?: Set<string> | string[];
   /** Whether to import Figma styles (FILL/TEXT/EFFECT) in addition to variables (default: true) */
   includeStyles?: boolean;
   /** Path to a Style Dictionary v5 config file. Takes full precedence over sdTransforms/sdOutputFormat when set */
@@ -34,6 +43,7 @@ export async function syncFigmaVariables(options: SyncOptions): Promise<void> {
     tokensOutputPath,
     jsonOutputPath,
     excludedCollections = new Set(),
+    includedCollections = [],
     includeStyles = true,
     sdConfigPath = null,
     sdTransforms = [ "attribute/cti", "name/kebab", "size/rem" ],
@@ -49,14 +59,15 @@ export async function syncFigmaVariables(options: SyncOptions): Promise<void> {
     : excludedCollections;
 
   const rawData = await getLocalVariables(figmaFileId, figmaToken);
-  const variableTokenFiles = tokenFilesFromLocalVariables(rawData, excludedSet);
+  const isIncluded = createIncludedCollectionsFilter(rawData.meta.variableCollections, includedCollections);
+  const variableTokenFiles = tokenFilesFromLocalVariables(rawData, excludedSet, isIncluded);
   const tokenFiles: import("./types.ts").BrandTokenFiles = {};
   for (const [ key, value ] of Object.entries(variableTokenFiles)) {
     tokenFiles[`variables/${key}`] = value;
   }
 
   if (includeStyles) {
-    const styleTokenFiles = await tokenFilesFromStyles(figmaFileId, figmaToken, rawData);
+    const styleTokenFiles = await tokenFilesFromStyles(figmaFileId, figmaToken, rawData, isIncluded);
     Object.assign(tokenFiles, styleTokenFiles);
   }
 

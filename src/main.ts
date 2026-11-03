@@ -4,6 +4,7 @@ import path from "node:path";
 import * as core from "@actions/core";
 
 import type { BrandTokenFiles } from "./types.ts";
+import { createIncludedCollectionsFilter } from "./collection-filter.ts";
 import { getLocalVariables } from "./figma-api.ts";
 import { parseInputs } from "./inputs.ts";
 import { runStyleDictionary } from "./style-dictionary.ts";
@@ -20,14 +21,20 @@ async function main(): Promise<void> {
   const { variableCollections, variables } = rawData.meta;
   core.info(`Collections: ${Object.keys(variableCollections).length}, Variables: ${Object.keys(variables).length}`);
 
-  const variableTokenFiles = tokenFilesFromLocalVariables(rawData, inputs.excludedCollections);
+  const isIncluded = createIncludedCollectionsFilter(variableCollections, inputs.includedCollections);
+  if (inputs.includedCollections.length > 0) {
+    const kept = Object.values(variableCollections).filter((c) => !c.remote && isIncluded(c.id)).map((c) => c.name);
+    core.info(`Included collections: ${kept.join(", ")}`);
+  }
+
+  const variableTokenFiles = tokenFilesFromLocalVariables(rawData, inputs.excludedCollections, isIncluded);
   const tokenFiles: BrandTokenFiles = {};
   for (const [ key, value ] of Object.entries(variableTokenFiles)) {
     tokenFiles[`variables/${key}`] = value;
   }
 
   core.info(`Fetching styles from Figma file: ${inputs.figmaFileId}`);
-  const styleTokenFiles = await tokenFilesFromStyles(inputs.figmaFileId, inputs.figmaToken, rawData);
+  const styleTokenFiles = await tokenFilesFromStyles(inputs.figmaFileId, inputs.figmaToken, rawData, isIncluded);
   core.info(`Styles: ${Object.keys(styleTokenFiles).join(", ")}`);
   Object.assign(tokenFiles, styleTokenFiles);
 

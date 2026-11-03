@@ -5,6 +5,7 @@ import type {
 } from "@figma/rest-api-spec";
 
 import type { Token, TokensFile, BrandTokenFiles, FigmaCollectionExtras } from "./types.ts";
+import type { CollectionPredicate } from "./collection-filter.ts";
 import { tokenTypeFromVariable, tokenValueFromVariable, getVariableValueForMode, isPercentageOpacity } from "./token-value.ts";
 
 export function collectReferencedVariableIds(
@@ -92,7 +93,8 @@ export function generateTokenForVariable(
 
 export function tokenFilesFromLocalVariables(
   localVariablesResponse: GetLocalVariablesResponse,
-  excludedCollections: Set<string>
+  excludedCollections: Set<string>,
+  isIncluded: CollectionPredicate = () => true
 ): BrandTokenFiles {
   const brandTokenFiles: BrandTokenFiles = {};
   const { variableCollections, variables } = localVariablesResponse.meta;
@@ -164,6 +166,7 @@ export function tokenFilesFromLocalVariables(
       !c.remote &&
       (c as ExtCollection).isExtension === true &&
       !excludedCollections.has(c.name) &&
+      isIncluded(c.id) &&
       c.modes.every((m) => allBaseModeNames.has(m.name))
   );
 
